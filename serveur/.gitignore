@@ -1,0 +1,10 @@
+venv_ocr/
+venv311/
+__pycache__/
+*.pyc
+.env
+*.pt
+*.safetensors
+*.bin
+models/
+.vscode/
