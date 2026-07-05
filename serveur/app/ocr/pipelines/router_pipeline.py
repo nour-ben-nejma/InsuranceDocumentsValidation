@@ -4,8 +4,8 @@
 app/ocr/pipelines/router_pipeline.py
 
 Point d'entree unique du pipeline OCR : classifie le document
-(constat_amiable / piece_identite / facture_reparation) puis
-dispatch vers le pipeline specialise correspondant.
+(constat_amiable / piece_identite / facture_reparation / carte_grise /
+permis_conduire) puis dispatch vers le pipeline specialise correspondant.
 
 C'est CETTE fonction (extract_text_from_image) que les routes FastAPI
 (app/api/routes_analyse.py) doivent appeler.
@@ -23,11 +23,17 @@ from app.core.model_loader import get_model_and_processor
 from app.ocr.pipelines.constat_pipeline import run_extraction_flow_constat_complete
 from app.ocr.pipelines.cin_pipeline import run_extraction_flow_cin
 from app.ocr.pipelines.facture_pipeline import run_extraction_flow_facture
+from app.ocr.pipelines.carte_grise_pipeline import run_extraction_flow_carte_grise
+from app.ocr.pipelines.permis_pipeline import run_extraction_flow_permis
 
 _SCHEMA = {
     "facture_reparation": ["provider_name", "client_name", "document_date", "purchased_products", "total_amount"],
     "constat_amiable": ["accident_date", "location", "insurance_company_a", "conductor_a", "assured_a", "vehicle_a"],
     "piece_identite": ["last_name", "first_name", "birth_date", "doc_number"],
+    "carte_grise": ["nom_prenom", "adresse", "cin_ou_mf", "n_immatriculation", "constructeur",
+                     "type_commercial", "date_mise_circulation"],
+    "permis_conduire": ["numero_permis", "nom", "prenom", "date_naissance", "lieu_naissance",
+                         "numero_carte", "categories"],
 }
 
 
@@ -42,7 +48,17 @@ def _classify_document(image: Image.Image) -> str:
     """Demande au VLM de classifier le type de document en un mot."""
     model, processor = get_model_and_processor()
 
-    classif_prompt = "Quel type de document parmi : facture_reparation, constat_amiable, piece_identite ? Un seul mot."
+    classif_prompt = (
+        "Quel type de document parmi : facture_reparation, constat_amiable, "
+        "piece_identite, carte_grise, permis_conduire ? Un seul mot.\n"
+        "Indices :\n"
+        "- carte_grise = certificat d'immatriculation d'un VEHICULE (pas une "
+        "personne), mentionne constructeur/type commercial/N immatriculation.\n"
+        "- piece_identite = carte d'identite nationale (CIN) d'une personne, "
+        "sans photo de vehicule, generalement bleue/verte.\n"
+        "- permis_conduire = carte 'PERMIS DE CONDUIRE' avec photo d'identite "
+        "de la personne et categories de vehicules autorises."
+    )
     messages = [{
         "role": "user",
         "content": [
@@ -68,12 +84,28 @@ def _classify_document(image: Image.Image) -> str:
     torch.cuda.empty_cache()
 
     matched_type = "facture_reparation"
-    for t in _SCHEMA:
+    # tri par longueur decroissante pour eviter que "permis_conduire" soit
+    # court-circuite par un match partiel accidentel avant "carte_grise" etc.
+    for t in sorted(_SCHEMA, key=len, reverse=True):
         if t in doc_type_raw.lower():
             matched_type = t
             break
     print(f"[DEBUG] Classification : '{doc_type_raw}' -> '{matched_type}'")
     return matched_type
+
+
+def _run_simple_card_pipeline(matched_type: str, image: Image.Image) -> dict:
+    """Factorise le traitement des documents 'carte simple' (CIN, carte grise, permis)."""
+    if matched_type == "piece_identite":
+        extracted_fields, raw_backup = run_extraction_flow_cin(image)
+    elif matched_type == "carte_grise":
+        extracted_fields, raw_backup = run_extraction_flow_carte_grise(image)
+    else:  # permis_conduire
+        extracted_fields, raw_backup = run_extraction_flow_permis(image)
+
+    structured = {f: {"value": extracted_fields.get(f) or "Non specifie"}
+                  for f in _SCHEMA[matched_type]}
+    return {"extracted_data": structured, "raw_text_backup": raw_backup}
 
 
 def extract_text_from_image(image_path: str) -> dict:
@@ -98,14 +130,12 @@ def extract_text_from_image(image_path: str) -> dict:
                 "status": "success",
             }
 
-        elif matched_type == "piece_identite":
-            extracted_fields, raw_backup = run_extraction_flow_cin(image)
-            structured = {f: {"value": extracted_fields.get(f) or "Non specifie"}
-                          for f in _SCHEMA[matched_type]}
+        elif matched_type in ("piece_identite", "carte_grise", "permis_conduire"):
+            result = _run_simple_card_pipeline(matched_type, image)
             return {
                 "document_type": matched_type,
-                "extracted_data": structured,
-                "raw_text_backup": raw_backup,
+                "extracted_data": result["extracted_data"],
+                "raw_text_backup": result["raw_text_backup"],
                 "total_elapsed_s": round(time.perf_counter() - t_total, 2),
                 "status": "success",
             }
