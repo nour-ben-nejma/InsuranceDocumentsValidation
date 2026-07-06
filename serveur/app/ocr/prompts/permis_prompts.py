@@ -11,7 +11,7 @@ adresse).
 PROMPT_PERMIS = """\
 Cette image est un permis de conduire tunisien (carte rose/violette,
 "REPUBLIQUE TUNISIENNE - PERMIS DE CONDUIRE"). Les champs sont numerotes
-1 a 8 sur la carte :
+1 a 7 sur la carte :
   1. Numero de permis
   2. Date de delivrance
   3. Nom (en MAJUSCULES latines, ligne du haut)
@@ -19,7 +19,7 @@ Cette image est un permis de conduire tunisien (carte rose/violette,
      c'est un mot DIFFERENT du nom, jamais le meme)
   5. Lieu de naissance, puis date de naissance juste en dessous
   6. Numero de la carte
-  7. Adresse (generalement ecrite en ARABE manuscrit ou imprime -
+  7. Adresse (generalement ecrite en ARABE  -
      recopie EXACTEMENT le texte arabe visible dans ce champ,
      n'invente JAMAIS une adresse en lettres latines a partir
      d'autres champs de la carte)
