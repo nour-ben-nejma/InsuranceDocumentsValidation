@@ -93,8 +93,8 @@ def _detect_boxes_imageprocessing(image: Image.Image) -> Tuple[List[int], List[i
     gray = cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY)
     _, thresh = cv2.threshold(gray, 120, 255, cv2.THRESH_BINARY_INV)
 
-    tableau_top = int(img_h * 0.12)
-    tableau_bottom = int(img_h * 0.70)
+    tableau_top = int(img_h * 0.19)
+    tableau_bottom = int(img_h * 0.76)
     line_height = (tableau_bottom - tableau_top) / 17.0
 
     scores_a, scores_b = [], []
@@ -123,24 +123,26 @@ def _detect_boxes_imageprocessing(image: Image.Image) -> Tuple[List[int], List[i
 
 def extract_checked_boxes(image: Image.Image, validate: bool = False) -> Tuple[List[int], List[int], Dict]:
     """
-    Tente d'abord la detection par image processing (rapide, pas de GPU).
-    Si rien n'est detecte, fallback sur le VLM (import local pour eviter
-    une dependance circulaire avec inference.py).
+    METHODE PRINCIPALE : VLM.
+
+    Historique : la detection par image processing (_detect_boxes_imageprocessing)
+    utilise des pourcentages fixes calibres sur une seule photo de reference.
+    Sur plusieurs photos reelles differentes (angle, cadrage, zoom variable),
+    cette calibration s'est reveleee non fiable a 3 reprises malgre les
+    ajustements. Plutot que de continuer a deviner des pourcentages qui ne
+    generalisent pas, on utilise le VLM comme methode principale : plus lent
+    (~5-8s) mais robuste a la variation de cadrage entre photos.
+
+    L'image processing reste disponible (_detect_boxes_imageprocessing) et
+    peut etre reactivee comme pre-filtre rapide plus tard, une fois qu'une
+    detection dynamique des lignes de la grille (au lieu de pourcentages
+    fixes) sera implementee -- piste documentee comme limitation connue.
     """
-    print("[BOXES] Detection cases Vehicule A et B...")
-    t0 = time.perf_counter()
-
-    boxes_a, boxes_b = _detect_boxes_imageprocessing(image)
-
-    if boxes_a or boxes_b:
-        confidence = "high" if (boxes_a and boxes_b) else "medium"
-        print(f"  OK Cases A: {boxes_a} | Cases B: {boxes_b} (Image Processing, {time.perf_counter()-t0:.2f}s)")
-        return boxes_a, boxes_b, {"confidence": confidence, "method": "image_processing"}
-
-    # Fallback VLM
     from app.ocr.inference import query_qwen  # import local: evite import circulaire
 
-    print("  [BOXES] Image Processing vide -> fallback VLM...")
+    print("[BOXES] Detection cases Vehicule A et B (VLM)...")
+    t0 = time.perf_counter()
+
     prompt_detect = (
         'Analyse la section "12. circonstances" (17 lignes).\n'
         'Case GAUCHE = Vehicule A (fond jaune). Case DROITE = Vehicule B (fond bleu).\n'
@@ -155,7 +157,7 @@ def extract_checked_boxes(image: Image.Image, validate: bool = False) -> Tuple[L
     )
 
     result, _, vlm_elapsed = query_qwen(image, prompt_detect, max_tokens=512,
-                                         resolution_limit=512, label="circonstances-VLM")
+                                         resolution_limit=600, label="circonstances-VLM")
     boxes_a, boxes_b = [], []
     if result:
         for key, val in result.items():
@@ -173,7 +175,19 @@ def extract_checked_boxes(image: Image.Image, validate: bool = False) -> Tuple[L
         boxes_b = sorted(set(boxes_b))
 
     confidence = "high" if (boxes_a or boxes_b) else "low"
-    print(f"  OK Cases A: {boxes_a} | Cases B: {boxes_b} (VLM fallback, {time.perf_counter()-t0:.2f}s)")
+    print(f"  OK Cases A: {boxes_a} | Cases B: {boxes_b} (VLM, {time.perf_counter()-t0:.2f}s)")
+
+    # Comparaison informative avec l'image processing (log uniquement, ne
+    # bloque rien) : utile pour un futur recalibrage si les deux methodes
+    # divergent souvent sur les memes zones.
+    try:
+        ip_boxes_a, ip_boxes_b = _detect_boxes_imageprocessing(image)
+        if set(ip_boxes_a) != set(boxes_a) or set(ip_boxes_b) != set(boxes_b):
+            print(f"  [INFO] Image processing aurait donne A={ip_boxes_a} B={ip_boxes_b} "
+                  f"(different du VLM, pour information seulement)")
+    except Exception as e:
+        print(f"  [INFO] Image processing (comparaison) a echoue silencieusement : {e}")
+
     return boxes_a, boxes_b, {"confidence": confidence, "method": "vlm"}
 
 
@@ -184,3 +198,37 @@ def resolve_circonstances(checked_rows_a: list, checked_rows_b: list) -> dict:
             "Vehicule B": [CIRCONSTANCES_MAP.get(int(i), f"Item {i}") for i in checked_rows_b],
         }
     }
+
+
+def save_debug_grid_overlay(image: Image.Image, output_path: str) -> None:
+    """
+    Dessine sur le crop circonstances les limites calculees (tableau_top/
+    bottom, colonnes zone_a/zone_b, et les 17 separations de lignes), puis
+    sauvegarde le resultat. A utiliser pour RECALIBRER visuellement les
+    pourcentages de _detect_boxes_imageprocessing sur une nouvelle photo,
+    au lieu de deviner : si les lignes rouges ne tombent pas exactement
+    sur les vraies cases a cocher, ajuste tableau_top/tableau_bottom/
+    les bornes de zone_a/zone_b en consequence puis relance.
+    """
+    img_cv = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+    img_h, img_w = img_cv.shape[:2]
+
+    tableau_top = int(img_h * 0.19)
+    tableau_bottom = int(img_h * 0.76)
+    line_height = (tableau_bottom - tableau_top) / 17.0
+
+    overlay = img_cv.copy()
+
+    # Lignes horizontales (17 separations)
+    for line_num in range(18):
+        y = tableau_top + int(line_num * line_height)
+        cv2.line(overlay, (0, y), (img_w, y), (0, 0, 255), 1)
+
+    # Colonnes checkbox A (jaune) et B (vert)
+    xa1, xa2 = int(img_w * 0.22), int(img_w * 0.31)
+    xb1, xb2 = int(img_w * 0.71), int(img_w * 0.80)
+    cv2.rectangle(overlay, (xa1, tableau_top), (xa2, tableau_bottom), (0, 255, 255), 2)
+    cv2.rectangle(overlay, (xb1, tableau_top), (xb2, tableau_bottom), (0, 255, 0), 2)
+
+    cv2.imwrite(output_path, overlay)
+    print(f"  [DEBUG GRID] Overlay sauvegarde : {output_path}")

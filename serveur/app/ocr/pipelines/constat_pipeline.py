@@ -21,7 +21,9 @@ Historique des tentatives sur vehicule A/B (pour memoire, ne pas repeter) :
     consomment de la VRAM en arriere-plan (navigateur, Discord...).
 """
 
+import os
 import time
+from datetime import datetime
 from typing import Dict, Optional
 
 import torch
@@ -30,6 +32,23 @@ from PIL import Image
 from app.ocr.inference import query_qwen
 from app.ocr.image_processing import extract_checked_boxes
 from app.ocr.prompts.constat_prompts import PROMPT_HEADER, PROMPT_SIGNATURE, make_prompt_vehicule
+
+# --- CONFIG DEBUG CROPS ---
+DEBUG_SAVE_CROPS = True  # mets False pour desactiver la sauvegarde
+DEBUG_CROPS_DIR = "debug_crops"
+
+
+def _save_debug_crop(crop: Image.Image, name: str, session_dir: str):
+    """Sauvegarde un crop dans le dossier de debug de la session en cours."""
+    if not DEBUG_SAVE_CROPS:
+        return
+    try:
+        os.makedirs(session_dir, exist_ok=True)
+        path = os.path.join(session_dir, f"{name}.png")
+        crop.save(path)
+        print(f"  [DEBUG] Crop sauvegarde : {path}")
+    except Exception as e:
+        print(f"  [DEBUG] Echec sauvegarde crop '{name}': {e}")
 
 
 def _safe_get(d, *keys, default=None):
@@ -44,29 +63,40 @@ def run_extraction_flow_constat_complete(image: Image.Image) -> tuple:
     width, height = image.size
     timings = {}
 
+    # Dossier unique par execution (timestamp), pour ne pas ecraser les runs precedents
+    session_dir = os.path.join(DEBUG_CROPS_DIR, datetime.now().strftime("%Y%m%d_%H%M%S"))
+
     def resize_crop(crop, tw, th):
         return crop.resize((tw, th), Image.Resampling.LANCZOS)
 
     # --- CROPS ---
-    header_crop = image.crop((0, 0, width, int(height * 0.22)))
+    header_crop = image.crop((0, 0, width, int(height * 0.3)))
     if max(header_crop.size) > 768:
         header_crop.thumbnail((768, 768), Image.Resampling.LANCZOS)
+    _save_debug_crop(header_crop, "01_header", session_dir)
 
     vehicule_a_crop = resize_crop(
         image.crop((0, int(height * 0.20), int(width * 0.45), int(height * 0.75))), 600, 600
     )
+    _save_debug_crop(vehicule_a_crop, "02_vehicule_a", session_dir)
+
     vehicule_b_crop = resize_crop(
         image.crop((int(width * 0.55), int(height * 0.20), width, int(height * 0.75))), 600, 600
     )
+    _save_debug_crop(vehicule_b_crop, "03_vehicule_b", session_dir)
+
     circonstances_crop = resize_crop(
         image.crop((int(width * 0.25), int(height * 0.18), int(width * 0.75), int(height * 0.87))), 600, 800
     )
+    _save_debug_crop(circonstances_crop, "04_circonstances", session_dir)
 
     sig_a_crop = image.crop((0, int(height * 0.90), int(width * 0.50), height))
     sig_b_crop = image.crop((int(width * 0.50), int(height * 0.90), width, height))
     for c in [sig_a_crop, sig_b_crop]:
         if max(c.size) > 512:
             c.thumbnail((512, 512), Image.Resampling.LANCZOS)
+    _save_debug_crop(sig_a_crop, "05_signature_a", session_dir)
+    _save_debug_crop(sig_b_crop, "06_signature_b", session_dir)
 
     # --- HEADER ---
     print("[INFERENCE] Header...")
@@ -146,6 +176,8 @@ def run_extraction_flow_constat_complete(image: Image.Image) -> tuple:
     for k, v in timings.items():
         print(f"   {k:<25} {v:.2f}s")
     print(f"   {'TOTAL':<25} {total:.2f}s")
+    if DEBUG_SAVE_CROPS:
+        print(f"   Crops sauvegardes dans : {session_dir}")
     print("-" * 50)
 
     raw_backup = (

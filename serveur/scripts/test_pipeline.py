@@ -34,11 +34,7 @@ from app.ocr.pipelines.router_pipeline import extract_text_from_image
 FIXTURES_DIR = Path(__file__).resolve().parent.parent / "tests" / "fixtures"
 
 TEST_IMAGES = [
-    FIXTURES_DIR / "assurance_constat_page-0001.jpg",
-    FIXTURES_DIR / "cin20_jpg (1).jpg",
-    FIXTURES_DIR / "20250109_110059.jpg",
-    Path("C:/Users/benne/Desktop/InsuranceDocumentsValidation/serveur/tests/fixtures/Capture d'écran 2026-07-05 143813.png"),
-    FIXTURES_DIR / "images.jpg",
+    Path(r"C:\Users\benne\Desktop\InsuranceDocumentsValidation\serveur\tests\fixtures\WhatsApp Image 2026-07-07 at 12.36.08 PM.jpeg")
 ]
 
 
