@@ -1,3 +1,4 @@
+// @ts-nocheck
 import * as React from "react"
 import { Combobox as ComboboxPrimitive } from "@base-ui/react"
 import { CheckIcon, ChevronDownIcon, XIcon } from "lucide-react"

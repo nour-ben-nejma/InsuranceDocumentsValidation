@@ -8,6 +8,7 @@ import {
   Loader2,
   FileClock,
   ArrowRight,
+  ServerCrash,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
@@ -20,15 +21,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useStore, countUploaded, type Dossier } from "@/lib/store";
+import { countUploaded, type Dossier } from "@/lib/store";
 import { StatusBadge } from "@/components/status-badge";
+import { useDossiers } from "@/hooks/use-dossiers";
 
 export const Route = createFileRoute("/")({
   component: Dashboard,
 });
 
 function Dashboard() {
-  const dossiers = useStore((s) => s.dossiers);
+  const { data: dossiers = [], isLoading, isError } = useDossiers();
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<string>("all");
 
@@ -53,6 +55,33 @@ function Dashboard() {
       ).length,
     };
   }, [dossiers]);
+
+  if (isLoading) {
+    return (
+      <AppShell>
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </AppShell>
+    );
+  }
+
+  if (isError) {
+    return (
+      <AppShell>
+        <div className="p-8 max-w-3xl mx-auto">
+          <Card className="p-10 text-center">
+            <ServerCrash className="h-10 w-10 text-destructive mx-auto mb-3" />
+            <h2 className="text-lg font-semibold">Impossible de contacter le serveur</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Vérifiez que le backend FastAPI tourne sur{" "}
+              <code className="bg-muted px-1 rounded">http://localhost:8000</code>
+            </p>
+          </Card>
+        </div>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell>

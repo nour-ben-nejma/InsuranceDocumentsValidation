@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -14,6 +14,12 @@ import {
   ShieldQuestion,
   GitCompareArrows,
   FileCheck2,
+  Trash2,
+  Eye,
+  UploadCloud,
+  Files,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
@@ -25,11 +31,18 @@ import { StatusBadge } from "@/components/status-badge";
 import {
   DOC_META,
   countUploaded,
-  generateMockReport,
-  useStore,
   type DocKey,
   type Report,
+  type DocState,
 } from "@/lib/store";
+import {
+  useDossier,
+  useUploadDocument,
+  useAnalyzeDossier,
+  useDeleteDocument,
+  useDeleteDossier,
+  getDocumentViewUrl,
+} from "@/hooks/use-dossiers";
 
 export const Route = createFileRoute("/dossier/$id")({
   component: DossierPage,
@@ -37,16 +50,43 @@ export const Route = createFileRoute("/dossier/$id")({
 
 function DossierPage() {
   const { id } = Route.useParams();
-  const dossier = useStore((s) => s.dossiers.find((d) => d.id === id));
-  const updateDoc = useStore((s) => s.updateDoc);
-  const setStatus = useStore((s) => s.setStatus);
-  const setReport = useStore((s) => s.setReport);
   const navigate = useNavigate();
-
-  const [analyzing, setAnalyzing] = useState(false);
+  const { data: dossier, isLoading, isError } = useDossier(id);
+  const uploadMutation = useUploadDocument();
+  const analyzeMutation = useAnalyzeDossier();
+  const deleteDocMutation = useDeleteDocument();
+  const deleteDossierMutation = useDeleteDossier();
   const [step, setStep] = useState(0);
+  const [showDocs, setShowDocs] = useState(false);
+  const replaceInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
-  if (!dossier) {
+  const analyzing = analyzeMutation.isPending;
+
+  // Animate steps while analyzing
+  useEffect(() => {
+    if (!analyzing) { setStep(0); return; }
+    setStep(0);
+    const steps = 4;
+    let i = 0;
+    const interval = setInterval(() => {
+      i++;
+      setStep(i);
+      if (i >= steps) clearInterval(interval);
+    }, 1200);
+    return () => clearInterval(interval);
+  }, [analyzing]);
+
+  if (isLoading) {
+    return (
+      <AppShell>
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </AppShell>
+    );
+  }
+
+  if (isError || !dossier) {
     return (
       <AppShell>
         <div className="p-8 max-w-3xl mx-auto">
@@ -68,22 +108,42 @@ function DossierPage() {
   const canAnalyze = uploaded === 5 && !analyzing;
 
   const runAnalysis = async () => {
-    setAnalyzing(true);
-    setStatus(dossier.id, "en_cours");
-    setStep(0);
-    const steps = 4;
-    for (let i = 0; i < steps; i++) {
-      await new Promise((r) => setTimeout(r, 900));
-      setStep(i + 1);
+    try {
+      const updated = await analyzeMutation.mutateAsync(dossier.id);
+      const report = updated.report as Report | undefined;
+      toast.success(
+        report?.global === "coherent"
+          ? "Analyse terminée : dossier cohérent"
+          : `Analyse terminée : ${report?.anomalies?.length ?? 0} anomalie(s) détectée(s)`,
+      );
+    } catch {
+      toast.error("Erreur lors de l'analyse. Vérifiez que le serveur backend est démarré.");
     }
-    const report = generateMockReport(dossier);
-    setReport(dossier.id, report);
-    setAnalyzing(false);
-    toast.success(
-      report.global === "coherent"
-        ? "Analyse terminée : dossier cohérent"
-        : `Analyse terminée : ${report.anomalies.length} anomalie(s) détectée(s)`,
-    );
+  };
+
+  const handleDeleteDossier = async () => {
+    if (!confirm("Supprimer définitivement ce dossier et tous ses documents ?")) return;
+    try {
+      await deleteDossierMutation.mutateAsync(dossier.id);
+      toast.success("Dossier supprimé.");
+      navigate({ to: "/" });
+    } catch {
+      toast.error("Erreur lors de la suppression du dossier.");
+    }
+  };
+
+  const handleDeleteDoc = async (docKey: DocKey) => {
+    if (!confirm(`Supprimer le document "${DOC_META[docKey].label}" ?`)) return;
+    try {
+      await deleteDocMutation.mutateAsync({ id: dossier.id, docKey });
+      toast.success("Document supprimé.");
+    } catch {
+      toast.error("Erreur lors de la suppression du document.");
+    }
+  };
+
+  const handleReplaceDoc = (docKey: DocKey) => {
+    replaceInputRefs.current[docKey]?.click();
   };
 
   return (
@@ -110,7 +170,7 @@ function DossierPage() {
               · Créé le {new Date(dossier.createdAt).toLocaleDateString("fr-FR")}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <div className="h-1.5 w-32 rounded-full bg-muted overflow-hidden">
                 <div
@@ -120,19 +180,169 @@ function DossierPage() {
               </div>
               <span className="tabular-nums">{uploaded}/5</span>
             </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/30"
+              onClick={handleDeleteDossier}
+              disabled={deleteDossierMutation.isPending}
+            >
+              {deleteDossierMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4 mr-1.5" />
+              )}
+              Supprimer le dossier
+            </Button>
           </div>
         </div>
 
         {analyzing ? (
           <AnalyzingView step={step} />
         ) : dossier.report ? (
-          <ReportView
-            report={dossier.report}
-            onRerun={runAnalysis}
-            onEdit={() => {
-              setReport(dossier.id, dossier.report!); // no-op; extraction handled inline in tabs
-            }}
-          />
+          <div className="space-y-6">
+            <ReportView
+              report={dossier.report as Report}
+              onRerun={runAnalysis}
+              onEdit={() => {}}
+            />
+
+            {/* Documents panel — collapsible after analysis */}
+            <Card className="overflow-hidden">
+              <button
+                type="button"
+                className="w-full flex items-center justify-between px-6 py-4 hover:bg-muted/30 transition-colors"
+                onClick={() => setShowDocs((v) => !v)}
+              >
+                <div className="flex items-center gap-2 text-sm font-semibold">
+                  <Files className="h-4 w-4 text-primary" />
+                  Documents du dossier
+                  <span className="ml-2 text-xs font-normal text-muted-foreground">
+                    {uploaded}/5 chargés
+                  </span>
+                </div>
+                {showDocs ? (
+                  <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                )}
+              </button>
+
+              {showDocs && (
+                <div className="px-6 pb-6 border-t pt-4">
+                  <p className="text-xs text-muted-foreground mb-4">
+                    Vous pouvez supprimer ou remplacer un document, puis relancer l'analyse.
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {(Object.keys(DOC_META) as DocKey[]).map((k) => {
+                      const docState: DocState = dossier.docs[k] ?? {};
+                      const hasFile = !!docState.fileName;
+                      const isUnavailable = !!docState.unavailable;
+                      const isDeleting =
+                        deleteDocMutation.isPending &&
+                        (deleteDocMutation.variables as { docKey: DocKey })?.docKey === k;
+                      const isUploading =
+                        uploadMutation.isPending &&
+                        uploadMutation.variables?.docKey === k;
+
+                      return (
+                        <div key={k} className="relative">
+                          {/* Hidden replace input */}
+                          <input
+                            ref={(el) => { replaceInputRefs.current[k] = el; }}
+                            type="file"
+                            accept=".pdf,image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                uploadMutation.mutate(
+                                  { id: dossier.id, docKey: k, file },
+                                  { onError: () => toast.error("Erreur lors de l'envoi du document.") }
+                                );
+                              }
+                              e.target.value = "";
+                            }}
+                          />
+
+                          <div
+                            className={`rounded-lg border p-4 transition-colors ${
+                              hasFile
+                                ? "border-success/40 bg-success/5"
+                                : isUnavailable
+                                  ? "border-warning/40 bg-warning/5"
+                                  : "border-dashed border-border bg-card"
+                            }`}
+                          >
+                            {(isDeleting || isUploading) && (
+                              <div className="absolute inset-0 rounded-lg bg-background/60 flex items-center justify-center z-10">
+                                <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                              </div>
+                            )}
+
+                            <div className="flex items-start justify-between gap-2 mb-2">
+                              <span className="text-sm font-medium">{DOC_META[k].label}</span>
+                              {hasFile && (
+                                <CheckCircle2 className="h-4 w-4 text-success shrink-0" />
+                              )}
+                            </div>
+
+                            {hasFile ? (
+                              <>
+                                <p className="text-xs text-muted-foreground truncate mb-3">
+                                  {docState.fileName}
+                                </p>
+                                <div className="flex gap-2 flex-wrap">
+                                  <a
+                                    href={getDocumentViewUrl(dossier.id, k)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border bg-card hover:bg-muted transition-colors"
+                                  >
+                                    <Eye className="h-3.5 w-3.5" />
+                                    Voir
+                                  </a>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleReplaceDoc(k)}
+                                    className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border bg-card hover:bg-muted transition-colors"
+                                  >
+                                    <UploadCloud className="h-3.5 w-3.5" />
+                                    Remplacer
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteDoc(k)}
+                                    className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border bg-card text-destructive hover:bg-destructive/10 transition-colors"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                    Supprimer
+                                  </button>
+                                </div>
+                              </>
+                            ) : isUnavailable ? (
+                              <p className="text-xs text-muted-foreground italic">
+                                Marqué comme non disponible
+                              </p>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleReplaceDoc(k)}
+                                className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border bg-card hover:bg-muted transition-colors"
+                              >
+                                <UploadCloud className="h-3.5 w-3.5" />
+                                Charger
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </Card>
+          </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-4">
@@ -149,7 +359,15 @@ function DossierPage() {
                       key={k}
                       docKey={k}
                       state={dossier.docs[k]}
-                      onChange={(s) => updateDoc(dossier.id, k, s)}
+                      isUploading={uploadMutation.isPending && uploadMutation.variables?.docKey === k}
+                      onChange={(file?: File) =>
+                        uploadMutation.mutate(
+                          { id: dossier.id, docKey: k, file },
+                          {
+                            onError: () => toast.error("Erreur lors de l'envoi du document."),
+                          }
+                        )
+                      }
                     />
                   ))}
                 </div>
@@ -342,85 +560,97 @@ function ReportView({
         </TabsList>
 
         <TabsContent value="comparaison" className="mt-4 space-y-3">
-          {report.comparisons.map((c) => (
-            <Card key={c.field} className="p-5">
-              <div className="flex items-center justify-between mb-3">
-                <div className="font-medium text-sm">{c.label}</div>
-                {c.ok ? (
-                  <span className="inline-flex items-center gap-1 text-xs text-success font-medium">
-                    <CheckCircle2 className="h-3.5 w-3.5" /> Cohérent
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 text-xs text-destructive font-medium">
-                    <AlertTriangle className="h-3.5 w-3.5" /> Divergence
-                  </span>
-                )}
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {c.docs.map((d) => (
-                  <div
-                    key={d}
-                    className={`rounded-md border p-3 ${
-                      c.ok ? "border-border bg-card" : "border-destructive/30 bg-destructive/5"
-                    }`}
-                  >
-                    <div className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
-                      {DOC_META[d].label}
-                    </div>
-                    <div className="text-sm font-medium mt-1 truncate">
-                      {c.values[d] ?? "—"}
-                    </div>
-                  </div>
-                ))}
-              </div>
+          {report.comparisons.length === 0 ? (
+            <Card className="p-8 text-center text-sm text-muted-foreground">
+              Aucune comparaison croisée disponible pour ce dossier.
             </Card>
-          ))}
+          ) : (
+            report.comparisons.map((c) => (
+              <Card key={c.field} className="p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="font-medium text-sm">{c.label}</div>
+                  {c.ok ? (
+                    <span className="inline-flex items-center gap-1 text-xs text-success font-medium">
+                      <CheckCircle2 className="h-3.5 w-3.5" /> Cohérent
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-xs text-destructive font-medium">
+                      <AlertTriangle className="h-3.5 w-3.5" /> Divergence
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {c.docs.map((d) => (
+                    <div
+                      key={d}
+                      className={`rounded-md border p-3 ${
+                        c.ok ? "border-border bg-card" : "border-destructive/30 bg-destructive/5"
+                      }`}
+                    >
+                      <div className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
+                        {DOC_META[d].label}
+                      </div>
+                      <div className="text-sm font-medium mt-1 truncate">
+                        {c.values[d] ?? "—"}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            ))
+          )}
         </TabsContent>
 
         <TabsContent value="dommages" className="mt-4">
-          <Card className="p-0 overflow-hidden">
-            <div className="grid grid-cols-12 px-5 py-3 border-b bg-muted/40 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              <div className="col-span-5">Zone / poste</div>
-              <div className="col-span-2 text-center">Déclaré</div>
-              <div className="col-span-2 text-center">Facturé</div>
-              <div className="col-span-2 text-right">Montant</div>
-              <div className="col-span-1 text-right">État</div>
-            </div>
-            {report.damageMapping.map((m, i) => (
-              <div
-                key={i}
-                className={`grid grid-cols-12 px-5 py-3 border-b last:border-b-0 items-center text-sm ${
-                  m.ok ? "" : "bg-destructive/5"
-                }`}
-              >
-                <div className="col-span-5 font-medium">{m.zone}</div>
-                <div className="col-span-2 text-center">
-                  {m.declared ? (
-                    <CheckCircle2 className="h-4 w-4 text-success inline" />
-                  ) : (
-                    <span className="text-destructive text-xs">Non</span>
-                  )}
-                </div>
-                <div className="col-span-2 text-center">
-                  {m.invoiced ? (
-                    <CheckCircle2 className="h-4 w-4 text-success inline" />
-                  ) : (
-                    <span className="text-destructive text-xs">Non</span>
-                  )}
-                </div>
-                <div className="col-span-2 text-right tabular-nums text-muted-foreground">
-                  {m.montant ? `${m.montant.toFixed(3)} TND` : "—"}
-                </div>
-                <div className="col-span-1 text-right">
-                  {m.ok ? (
-                    <span className="text-success text-xs font-medium">OK</span>
-                  ) : (
-                    <span className="text-destructive text-xs font-medium">!</span>
-                  )}
-                </div>
+          {report.damageMapping.length === 0 ? (
+            <Card className="p-8 text-center text-sm text-muted-foreground">
+              Aucun rapprochement dommages disponible pour ce dossier.
+            </Card>
+          ) : (
+            <Card className="p-0 overflow-hidden">
+              <div className="grid grid-cols-12 px-5 py-3 border-b bg-muted/40 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                <div className="col-span-5">Zone / poste</div>
+                <div className="col-span-2 text-center">Déclaré</div>
+                <div className="col-span-2 text-center">Facturé</div>
+                <div className="col-span-2 text-right">Montant</div>
+                <div className="col-span-1 text-right">État</div>
               </div>
-            ))}
-          </Card>
+              {report.damageMapping.map((m, i) => (
+                <div
+                  key={i}
+                  className={`grid grid-cols-12 px-5 py-3 border-b last:border-b-0 items-center text-sm ${
+                    m.ok ? "" : "bg-destructive/5"
+                  }`}
+                >
+                  <div className="col-span-5 font-medium">{m.zone}</div>
+                  <div className="col-span-2 text-center">
+                    {m.declared ? (
+                      <CheckCircle2 className="h-4 w-4 text-success inline" />
+                    ) : (
+                      <span className="text-destructive text-xs">Non</span>
+                    )}
+                  </div>
+                  <div className="col-span-2 text-center">
+                    {m.invoiced ? (
+                      <CheckCircle2 className="h-4 w-4 text-success inline" />
+                    ) : (
+                      <span className="text-destructive text-xs">Non</span>
+                    )}
+                  </div>
+                  <div className="col-span-2 text-right tabular-nums text-muted-foreground">
+                    {m.montant ? `${m.montant.toFixed(3)} TND` : "—"}
+                  </div>
+                  <div className="col-span-1 text-right">
+                    {m.ok ? (
+                      <span className="text-success text-xs font-medium">OK</span>
+                    ) : (
+                      <span className="text-destructive text-xs font-medium">!</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="anomalies" className="mt-4 space-y-2">
@@ -469,9 +699,15 @@ function ReportView({
         </TabsContent>
 
         <TabsContent value="extraits" className="mt-4 space-y-3">
-          {(Object.keys(report.extracted) as DocKey[]).map((k) => (
-            <ExtractedCard key={k} docKey={k} fields={report.extracted[k]!} />
-          ))}
+          {Object.keys(report.extracted).length === 0 ? (
+            <Card className="p-8 text-center text-sm text-muted-foreground">
+              Aucun champ extrait disponible.
+            </Card>
+          ) : (
+            (Object.keys(report.extracted) as DocKey[]).map((k) => (
+              <ExtractedCard key={k} docKey={k} fields={report.extracted[k]!} />
+            ))
+          )}
         </TabsContent>
       </Tabs>
     </div>

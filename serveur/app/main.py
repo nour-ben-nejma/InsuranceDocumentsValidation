@@ -65,7 +65,9 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://localhost:3000",
+        "http://localhost:8081",
         "http://127.0.0.1:5173",
+        "http://127.0.0.1:8081",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -95,17 +97,17 @@ def health_check():
 # Les imports sont groupes ici pour que main.py reste le seul endroit
 # a connaitre l'ensemble des routes exposees par l'API.
 
-# from app.api.routes_dossiers import router as dossiers_router
-# from app.api.routes_documents import router as documents_router
-# from app.api.routes_analyse import router as analyse_router
-#
-# app.include_router(dossiers_router, prefix="/dossiers", tags=["Dossiers"])
-# app.include_router(documents_router, prefix="/dossiers", tags=["Documents"])
-# app.include_router(analyse_router, prefix="/dossiers", tags=["Analyse"])
+from app.api.routes_dossiers import router as dossiers_router
+from app.api.routes_documents import router as documents_router
+from app.api.routes_analyse import router as analyse_router
+
+app.include_router(dossiers_router, prefix="/dossiers", tags=["Dossiers"])
+app.include_router(documents_router, prefix="/dossiers", tags=["Documents"])
+app.include_router(analyse_router, prefix="/dossiers", tags=["Analyse"])
 
 
 if __name__ == "__main__":
     # Lancement direct pour debug : python app/main.py
     # (prefer uvicorn app.main:app --reload en usage normal)
     import uvicorn
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=False)
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8080, reload=False)

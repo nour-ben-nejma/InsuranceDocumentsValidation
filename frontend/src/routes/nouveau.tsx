@@ -6,9 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
-import { useStore } from "@/lib/store";
-import { ArrowLeft } from "lucide-react";
+import { Loader2, ArrowLeft } from "lucide-react";
 import { Link } from "@tanstack/react-router";
+import { useCreateDossier } from "@/hooks/use-dossiers";
 
 export const Route = createFileRoute("/nouveau")({
   component: NouveauDossier,
@@ -16,19 +16,23 @@ export const Route = createFileRoute("/nouveau")({
 
 function NouveauDossier() {
   const navigate = useNavigate();
-  const create = useStore((s) => s.createDossier);
+  const createMutation = useCreateDossier();
   const [numero, setNumero] = useState("");
   const [client, setClient] = useState("");
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!numero.trim() || !client.trim()) {
       toast.error("Veuillez renseigner le numéro de dossier et le nom du client.");
       return;
     }
-    const id = create(numero.trim(), client.trim());
-    toast.success("Dossier créé");
-    navigate({ to: "/dossier/$id", params: { id } });
+    try {
+      const dossier = await createMutation.mutateAsync({ numero: numero.trim(), client: client.trim() });
+      toast.success("Dossier créé");
+      navigate({ to: "/dossier/$id", params: { id: dossier.id } });
+    } catch {
+      toast.error("Erreur lors de la création du dossier. Le serveur est-il démarré ?");
+    }
   };
 
   return (
@@ -72,7 +76,10 @@ function NouveauDossier() {
               <Button variant="ghost" asChild type="button">
                 <Link to="/">Annuler</Link>
               </Button>
-              <Button type="submit">Créer le dossier</Button>
+              <Button type="submit" disabled={createMutation.isPending}>
+                {createMutation.isPending && <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />}
+                Créer le dossier
+              </Button>
             </div>
           </form>
         </Card>

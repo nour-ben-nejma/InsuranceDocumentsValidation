@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   X,
   Ban,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DOC_META, type DocKey, type DocState } from "@/lib/store";
@@ -24,11 +25,14 @@ const iconMap = {
 export function DocUploader({
   docKey,
   state,
+  isUploading = false,
   onChange,
 }: {
   docKey: DocKey;
   state: DocState;
-  onChange: (s: DocState) => void;
+  isUploading?: boolean;
+  /** Pass `undefined` to mark as unavailable, or a `File` to upload it. */
+  onChange: (file?: File) => void;
 }) {
   const meta = DOC_META[docKey];
   const Icon = iconMap[meta.icon as keyof typeof iconMap];
@@ -40,12 +44,7 @@ export function DocUploader({
       alert("Fichier trop volumineux (max 10 Mo)");
       return;
     }
-    onChange({
-      fileName: file.name,
-      fileSize: file.size,
-      uploadedAt: Date.now(),
-      unavailable: false,
-    });
+    onChange(file);
   };
 
   const uploaded = !!state.fileName;
@@ -74,6 +73,11 @@ export function DocUploader({
               : "border-dashed border-border bg-card hover:border-primary/50"
       }`}
     >
+      {isUploading && (
+        <div className="absolute inset-0 rounded-lg bg-background/60 flex items-center justify-center z-10">
+          <Loader2 className="h-5 w-5 animate-spin text-primary" />
+        </div>
+      )}
       <div className="flex items-start gap-4">
         <div
           className={`h-10 w-10 shrink-0 rounded-md flex items-center justify-center ${
@@ -102,7 +106,7 @@ export function DocUploader({
               </div>
               <button
                 type="button"
-                onClick={() => onChange({})}
+                onClick={() => onChange(undefined)}
                 className="text-muted-foreground hover:text-destructive p-1"
                 aria-label="Supprimer"
               >
@@ -116,7 +120,7 @@ export function DocUploader({
               </div>
               <button
                 type="button"
-                onClick={() => onChange({})}
+                onClick={() => onChange(undefined)}
                 className="text-muted-foreground hover:text-foreground p-1"
                 aria-label="Annuler"
               >
@@ -134,6 +138,7 @@ export function DocUploader({
                   size="sm"
                   variant="outline"
                   onClick={() => inputRef.current?.click()}
+                  disabled={isUploading}
                 >
                   <UploadCloud className="h-3.5 w-3.5 mr-1.5" />
                   Parcourir
@@ -143,9 +148,8 @@ export function DocUploader({
                   size="sm"
                   variant="ghost"
                   className="text-muted-foreground"
-                  onClick={() =>
-                    onChange({ unavailable: true, uploadedAt: Date.now() })
-                  }
+                  onClick={() => onChange(undefined)}
+                  disabled={isUploading}
                 >
                   <Ban className="h-3.5 w-3.5 mr-1.5" />
                   Non disponible

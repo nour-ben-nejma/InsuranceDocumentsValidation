@@ -20,8 +20,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
   return (
-    <div className="flex min-h-screen w-full bg-background text-foreground">
-      <aside className="hidden md:flex w-64 flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border">
+    <div className="flex h-screen w-screen bg-background text-foreground overflow-hidden">
+      <aside className="hidden md:flex w-64 flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border shrink-0">
         <div className="flex items-center gap-2 px-5 py-6 border-b border-sidebar-border">
           <div className="flex h-9 w-9 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
             <ShieldCheck className="h-5 w-5" />
@@ -61,8 +61,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-14 border-b border-border bg-card/50 backdrop-blur px-6 flex items-center justify-between">
+      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+        <header className="h-14 border-b border-border bg-card/50 backdrop-blur px-6 flex items-center justify-between shrink-0">
           <div className="text-sm text-muted-foreground">
             Vérification automatique des dossiers d'assurance auto
           </div>
@@ -79,7 +79,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <main className="flex-1 min-w-0">{children}</main>
+        <main className="flex-1 min-w-0 overflow-y-auto">{children}</main>
       </div>
     </div>
   );
