@@ -11,7 +11,8 @@ def create_dossier(db: Session, dossier: DossierCreate):
         "cin": {},
         "attestation": {},
         "constat": {},
-        "facture": {}
+        "facture": {},
+        "permis": {}
     }
     db_dossier = DossierDB(
         id=dossier_id,
@@ -49,6 +50,17 @@ def update_dossier_report(db: Session, dossier_id: str, report: dict, status: st
     if db_dossier:
         db_dossier.report = report
         db_dossier.status = status
+        db.commit()
+        db.refresh(db_dossier)
+    return db_dossier
+
+def update_extracted_overrides(db: Session, dossier_id: str, doc_key: str, fields: dict):
+    """Merge user-edited fields into extracted_overrides for the given doc_key."""
+    db_dossier = get_dossier(db, dossier_id)
+    if db_dossier:
+        overrides = dict(db_dossier.extracted_overrides or {})
+        overrides[doc_key] = fields
+        db_dossier.extracted_overrides = overrides
         db.commit()
         db.refresh(db_dossier)
     return db_dossier

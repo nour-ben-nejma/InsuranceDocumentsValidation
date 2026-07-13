@@ -23,6 +23,7 @@ class DossierDB(Base):
     status = Column(String, default="brouillon")
     docs = Column(JSON, default=dict)
     report = Column(JSON, nullable=True)
+    extracted_overrides = Column(JSON, nullable=True)  # Champs modifiés manuellement par l'utilisateur
 
 Base.metadata.create_all(bind=engine)
 

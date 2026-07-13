@@ -131,6 +131,54 @@ export function useAnalyzeDossier() {
   });
 }
 
+/** Sauvegarde les champs modifiés manuellement pour un document donné */
+export function useSaveExtracted() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      docKey,
+      fields,
+    }: {
+      id: string;
+      docKey: string;
+      fields: Record<string, string>;
+    }) => {
+      const res = await fetch(`${API_URL}/${id}/extracted`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ doc_key: docKey, fields }),
+      });
+      if (!res.ok) throw new Error("Failed to save extracted fields");
+      return res.json() as Promise<Dossier>;
+    },
+    onSuccess: (_, variables) => {
+      qc.invalidateQueries({ queryKey: ["dossier", variables.id] });
+    },
+  });
+}
+
+/** Relance uniquement la cohérence (sans OCR) avec les données déjà extraites */
+export function useReanalyseDossier() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`${API_URL}/${id}/reanalyse`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || "Failed to reanalyse dossier");
+      }
+      return res.json() as Promise<Dossier>;
+    },
+    onSuccess: (_, id) => {
+      qc.invalidateQueries({ queryKey: ["dossiers"] });
+      qc.invalidateQueries({ queryKey: ["dossier", id] });
+    },
+  });
+}
+
 /** Build the URL to view a document in the browser */
 export function getDocumentViewUrl(dossierId: string, docKey: DocKey): string {
   return `${API_URL}/${dossierId}/documents/${docKey}/view`;

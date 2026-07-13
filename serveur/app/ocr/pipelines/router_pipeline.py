@@ -116,7 +116,8 @@ def extract_text_from_image(image_path: str) -> dict:
     """
     t_total = time.perf_counter()
     try:
-        image = Image.open(image_path).convert("RGB")
+        with Image.open(image_path) as img:
+            image = img.convert("RGB")
         matched_type = _classify_document(image)
 
         if matched_type == "constat_amiable":

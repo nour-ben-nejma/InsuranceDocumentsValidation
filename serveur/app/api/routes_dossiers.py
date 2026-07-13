@@ -31,14 +31,9 @@ def get_dossier(dossier_id: str, db: Session = Depends(get_db)):
 @router.delete("/{dossier_id}")
 def delete_dossier(dossier_id: str, db: Session = Depends(get_db)):
     """Permanently delete a dossier and all its data."""
-    # Delete physical files from disk first
-    upload_dir = os.path.join(os.path.dirname(__file__), "..", "..", "storage", "images")
-    if os.path.exists(upload_dir):
-        for dossier_file in glob.glob(os.path.join(upload_dir, f"{dossier_id}_*")):
-            try:
-                os.remove(dossier_file)
-            except Exception:
-                pass
+    from app.core.storage import get_storage_provider
+    storage = get_storage_provider()
+    storage.delete_dossier_files(dossier_id)
 
     success = crud.delete_dossier(db, dossier_id)
     if not success:

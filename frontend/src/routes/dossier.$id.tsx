@@ -41,6 +41,8 @@ import {
   useAnalyzeDossier,
   useDeleteDocument,
   useDeleteDossier,
+  useSaveExtracted,
+  useReanalyseDossier,
   getDocumentViewUrl,
 } from "@/hooks/use-dossiers";
 
@@ -54,6 +56,7 @@ function DossierPage() {
   const { data: dossier, isLoading, isError } = useDossier(id);
   const uploadMutation = useUploadDocument();
   const analyzeMutation = useAnalyzeDossier();
+  const reanalyseMutation = useReanalyseDossier();
   const deleteDocMutation = useDeleteDocument();
   const deleteDossierMutation = useDeleteDossier();
   const [step, setStep] = useState(0);
@@ -105,7 +108,7 @@ function DossierPage() {
   }
 
   const uploaded = countUploaded(dossier);
-  const canAnalyze = uploaded === 5 && !analyzing;
+  const canAnalyze = uploaded === 6 && !analyzing;
 
   const runAnalysis = async () => {
     try {
@@ -175,10 +178,10 @@ function DossierPage() {
               <div className="h-1.5 w-32 rounded-full bg-muted overflow-hidden">
                 <div
                   className="h-full bg-primary transition-all"
-                  style={{ width: `${(uploaded / 5) * 100}%` }}
+                  style={{ width: `${(uploaded / 6) * 100}%` }}
                 />
               </div>
-              <span className="tabular-nums">{uploaded}/5</span>
+              <span className="tabular-nums">{uploaded}/6</span>
             </div>
             <Button
               variant="outline"
@@ -203,7 +206,11 @@ function DossierPage() {
           <div className="space-y-6">
             <ReportView
               report={dossier.report as Report}
+              dossierId={dossier.id}
               onRerun={runAnalysis}
+              onReanalyse={() => reanalyseMutation.mutate(dossier.id, {
+                onError: (e) => toast.error(e.message),
+              })}
               onEdit={() => {}}
             />
 
@@ -218,7 +225,7 @@ function DossierPage() {
                   <Files className="h-4 w-4 text-primary" />
                   Documents du dossier
                   <span className="ml-2 text-xs font-normal text-muted-foreground">
-                    {uploaded}/5 chargés
+                    {uploaded}/6 chargés
                   </span>
                 </div>
                 {showDocs ? (
@@ -350,7 +357,7 @@ function DossierPage() {
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-base font-semibold">Documents du dossier</h2>
                   <span className="text-xs text-muted-foreground">
-                    5 documents attendus
+                    6 documents attendus
                   </span>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -389,10 +396,10 @@ function DossierPage() {
                   <Play className="h-4 w-4 mr-2" />
                   Analyser le dossier
                 </Button>
-                {uploaded < 5 && (
+                {uploaded < 6 && (
                   <p className="text-xs text-muted-foreground mt-3 flex items-start gap-1.5">
                     <AlertTriangle className="h-3.5 w-3.5 text-warning-foreground shrink-0 mt-0.5" />
-                    Chargez ou marquez comme non disponible les {5 - uploaded}{" "}
+                    Chargez ou marquez comme non disponible les {6 - uploaded}{" "}
                     document(s) restant(s).
                   </p>
                 )}
@@ -489,10 +496,14 @@ function AnalyzingView({ step }: { step: number }) {
 
 function ReportView({
   report,
+  dossierId,
   onRerun,
+  onReanalyse,
 }: {
   report: Report;
+  dossierId: string;
   onRerun: () => void;
+  onReanalyse: () => void;
   onEdit: () => void;
 }) {
   const coherent = report.global === "coherent";
@@ -532,9 +543,13 @@ function ReportView({
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={onRerun}>
+            <Button variant="outline" onClick={onReanalyse} title="Relancer uniquement la cohérence (sans refaire l'OCR)">
+              <GitCompareArrows className="h-4 w-4 mr-1.5" />
+              Cohérence
+            </Button>
+            <Button variant="outline" onClick={onRerun} title="Relancer l'analyse complète (OCR + cohérence)">
               <RefreshCw className="h-4 w-4 mr-1.5" />
-              Relancer
+              Relancer tout
             </Button>
             <Button variant="outline" onClick={() => window.print()}>
               <Printer className="h-4 w-4 mr-1.5" />
@@ -691,7 +706,7 @@ function ReportView({
                       {a.severity}
                     </span>
                   </div>
-                  <div className="text-sm mt-1">{a.message}</div>
+                  <div className="text-sm mt-1">{a.message || (a as any).detail}</div>
                 </div>
               </Card>
             ))
@@ -705,7 +720,7 @@ function ReportView({
             </Card>
           ) : (
             (Object.keys(report.extracted) as DocKey[]).map((k) => (
-              <ExtractedCard key={k} docKey={k} fields={report.extracted[k]!} />
+              <ExtractedCard key={k} dossierId={dossierId} docKey={k} fields={report.extracted[k]!} />
             ))
           )}
         </TabsContent>
@@ -715,12 +730,15 @@ function ReportView({
 }
 
 function ExtractedCard({
+  dossierId,
   docKey,
   fields,
 }: {
+  dossierId: string;
   docKey: DocKey;
   fields: NonNullable<Report["extracted"][DocKey]>;
 }) {
+  const saveExtracted = useSaveExtracted();
   const [editing, setEditing] = useState<string | null>(null);
   const [values, setValues] = useState<Record<string, string>>(() => {
     const out: Record<string, string> = {};
@@ -730,12 +748,15 @@ function ExtractedCard({
     return out;
   });
 
+  const [dirty, setDirty] = useState(false);
+
   useEffect(() => {
     const out: Record<string, string> = {};
     for (const [k, v] of Object.entries(fields)) {
       if (typeof v === "string") out[k] = v;
     }
     setValues(out);
+    setDirty(false);
   }, [fields]);
 
   const scalarEntries = Object.entries(fields).filter(
@@ -746,9 +767,39 @@ function ExtractedCard({
     string[],
   ][];
 
+  const handleSave = () => {
+    saveExtracted.mutate(
+      { id: dossierId, docKey, fields: values },
+      {
+        onSuccess: () => {
+          setDirty(false);
+          setEditing(null);
+        },
+      }
+    );
+  };
+
   return (
     <Card className="p-5">
-      <div className="font-medium text-sm mb-3">{DOC_META[docKey].label}</div>
+      <div className="flex items-center justify-between mb-3">
+        <div className="font-medium text-sm">{DOC_META[docKey].label}</div>
+        {dirty && (
+          <Button
+            size="sm"
+            variant="default"
+            onClick={handleSave}
+            disabled={saveExtracted.isPending}
+            className="h-7 text-xs"
+          >
+            {saveExtracted.isPending ? (
+              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+            ) : (
+              <CheckCircle2 className="h-3 w-3 mr-1" />
+            )}
+            Sauvegarder
+          </Button>
+        )}
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {scalarEntries.map(([k]) => (
           <div key={k} className="flex items-center justify-between gap-2 border rounded-md px-3 py-2 bg-card">
@@ -760,7 +811,10 @@ function ExtractedCard({
                 <Input
                   autoFocus
                   value={values[k] ?? ""}
-                  onChange={(e) => setValues({ ...values, [k]: e.target.value })}
+                  onChange={(e) => {
+                    setValues({ ...values, [k]: e.target.value });
+                    setDirty(true);
+                  }}
                   onBlur={() => setEditing(null)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") setEditing(null);

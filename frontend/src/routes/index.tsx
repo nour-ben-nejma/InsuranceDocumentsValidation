@@ -183,11 +183,11 @@ function DossierRow({ d }: { d: Dossier }) {
           <div className="h-1.5 w-24 rounded-full bg-muted overflow-hidden">
             <div
               className="h-full bg-primary transition-all"
-              style={{ width: `${(uploaded / 5) * 100}%` }}
+              style={{ width: `${(uploaded / 6) * 100}%` }}
             />
           </div>
           <span className="text-xs text-muted-foreground tabular-nums">
-            {uploaded}/5
+            {uploaded}/6
           </span>
         </div>
       </div>

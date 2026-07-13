@@ -5,6 +5,7 @@ import {
   ShieldCheck,
   ClipboardList,
   ReceiptText,
+  CreditCard,
   UploadCloud,
   CheckCircle2,
   X,
@@ -20,6 +21,7 @@ const iconMap = {
   ShieldCheck,
   ClipboardList,
   ReceiptText,
+  CreditCard,
 };
 
 export function DocUploader({

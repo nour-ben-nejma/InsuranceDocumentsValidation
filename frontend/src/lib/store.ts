@@ -6,7 +6,8 @@ export type DocKey =
   | "cin"
   | "attestation"
   | "constat"
-  | "facture";
+  | "facture"
+  | "permis";
 
 export const DOC_META: Record<DocKey, { label: string; icon: string }> = {
   carte_grise: { label: "Carte grise", icon: "FileText" },
@@ -14,6 +15,7 @@ export const DOC_META: Record<DocKey, { label: string; icon: string }> = {
   attestation: { label: "Attestation d'assurance", icon: "ShieldCheck" },
   constat: { label: "Constat amiable", icon: "ClipboardList" },
   facture: { label: "Facture de réparation", icon: "ReceiptText" },
+  permis: { label: "Permis de conduire", icon: "CreditCard" },
 };
 
 export type DocState = {
@@ -88,6 +90,7 @@ const emptyDocs = (): Record<DocKey, DocState> => ({
   attestation: {},
   constat: {},
   facture: {},
+  permis: {},
 });
 
 export const useStore = create<Store>()(
