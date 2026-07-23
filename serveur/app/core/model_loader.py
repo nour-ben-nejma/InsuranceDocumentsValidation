@@ -19,6 +19,9 @@ import time
 import threading
 
 os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+os.environ.setdefault("HF_DATASETS_OFFLINE", "1")
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
 
 import torch
 from transformers import (
@@ -99,10 +102,11 @@ class ModelManager:
                 quantization_config=quantization_config,
                 device_map={"": 0},
                 attn_implementation="sdpa",
+                local_files_only=True,
             )
             self.model.eval()
 
-            self.processor = AutoProcessor.from_pretrained(MODEL_NAME)
+            self.processor = AutoProcessor.from_pretrained(MODEL_NAME, local_files_only=True)
             self.processor.tokenizer.padding_side = "left"
 
             self.device = "cuda"

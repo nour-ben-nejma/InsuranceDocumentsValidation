@@ -12,7 +12,8 @@ def create_dossier(db: Session, dossier: DossierCreate):
         "attestation": {},
         "constat": {},
         "facture": {},
-        "permis": {}
+        "permis": {},
+        "photos_degats": {}
     }
     db_dossier = DossierDB(
         id=dossier_id,
@@ -70,7 +71,10 @@ def delete_document(db: Session, dossier_id: str, doc_key: str):
     db_dossier = get_dossier(db, dossier_id)
     if db_dossier:
         docs = dict(db_dossier.docs)
-        docs[doc_key] = {}
+        if doc_key.startswith("photos_degats"):
+            docs.pop(doc_key, None)
+        else:
+            docs[doc_key] = {}
         db_dossier.docs = docs
         # Reset status to en_cours if it was coherent/a_verifier
         if db_dossier.status in ("coherent", "a_verifier"):

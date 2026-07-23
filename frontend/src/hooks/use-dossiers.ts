@@ -53,7 +53,7 @@ export function useUploadDocument() {
       file,
     }: {
       id: string;
-      docKey: DocKey;
+      docKey: string;
       file?: File;
     }) => {
       if (!file) {
@@ -84,7 +84,7 @@ export function useUploadDocument() {
 export function useDeleteDocument() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, docKey }: { id: string; docKey: DocKey }) => {
+    mutationFn: async ({ id, docKey }: { id: string; docKey: string }) => {
       const res = await fetch(`${API_URL}/${id}/documents/${docKey}`, {
         method: "DELETE",
       });
@@ -180,6 +180,6 @@ export function useReanalyseDossier() {
 }
 
 /** Build the URL to view a document in the browser */
-export function getDocumentViewUrl(dossierId: string, docKey: DocKey): string {
+export function getDocumentViewUrl(dossierId: string, docKey: string): string {
   return `${API_URL}/${dossierId}/documents/${docKey}/view`;
 }

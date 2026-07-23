@@ -56,6 +56,7 @@ def build_normalized_dossier(documents: Dict[str, Optional[Dict]]) -> Dict[str, 
     facture = documents.get("facture")
     carte_grise = documents.get("carte_grise")
     permis = documents.get("permis")
+    photos_degats = documents.get("photos_degats")
 
     normalized = {
         "constat": {
@@ -66,6 +67,11 @@ def build_normalized_dossier(documents: Dict[str, Optional[Dict]]) -> Dict[str, 
             "conducteur_a_permis": _get(constat, "7. Identite du Conducteur", "Vehicule A", "Permis de conduire N"),
             "assure_a_nom": _get(constat, "8. Assure", "Vehicule A", "Nom/Prenom"),
             "immatriculation_a": _get(constat, "9. Identite du Vehicule", "Vehicule A", "N immatriculation"),
+            "choc_initial_a": _get(constat, "10. Point de choc initial", "Vehicule A"),
+            "degats_apparents_a": _get(constat, "11. Degats apparents", "Vehicule A"),
+            "assurance_validite_du": _get(constat, "6. Societe d Assurances", "Vehicule A", "Validite", "du"),
+            "assurance_validite_au": _get(constat, "6. Societe d Assurances", "Vehicule A", "Validite", "au"),
+            "conducteur_a_permis_delivre": _get(constat, "7. Identite du Conducteur", "Vehicule A", "Delivre le"),
             "circonstances_a": _get(constat, "12. Circonstances", "Vehicule A", default=[]),
             "circonstances_b": _get(constat, "12. Circonstances", "Vehicule B", default=[]),
             "confidence_flags": _get(constat, "confidence_flags", default={}),
@@ -94,5 +100,8 @@ def build_normalized_dossier(documents: Dict[str, Optional[Dict]]) -> Dict[str, 
             "prenom": _unwrap_value(_get(permis, "prenom")),
             "numero_permis": _unwrap_value(_get(permis, "numero_permis")),
         } if permis else None,
+        "photos_degats": {
+            "pieces_endommagees": _get(photos_degats, "pieces_endommagees", default=[])
+        } if photos_degats else None,
     }
     return normalized

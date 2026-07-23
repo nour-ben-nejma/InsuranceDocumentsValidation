@@ -20,8 +20,15 @@ process Python -> le modele est recharge (10-40s). Desactive --reload
 des que tu testes des inferences repetees pour ne pas perdre de temps.
 """
 
+import os
 import time
 from contextlib import asynccontextmanager
+
+# ── Mode hors-ligne : le modèle est déjà dans le cache HuggingFace local.
+# Empêche transformers/datasets de tenter des connexions réseau au démarrage.
+os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+os.environ.setdefault("HF_DATASETS_OFFLINE", "1")
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -64,9 +71,15 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
+        "http://localhost:4173",
         "http://localhost:3000",
+        "http://localhost:8080",
         "http://localhost:8081",
+        "http://localhost:8082",
         "http://127.0.0.1:5173",
+        "http://127.0.0.1:4173",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:8080",
         "http://127.0.0.1:8081",
     ],
     allow_credentials=True,

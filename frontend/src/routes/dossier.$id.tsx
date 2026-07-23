@@ -20,6 +20,9 @@ import {
   Files,
   ChevronDown,
   ChevronUp,
+  Camera,
+  ImagePlus,
+  X,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
@@ -107,8 +110,9 @@ function DossierPage() {
     );
   }
 
-  const uploaded = countUploaded(dossier);
-  const canAnalyze = uploaded === 6 && !analyzing;
+  const requiredKeys: DocKey[] = ["carte_grise", "cin", "attestation", "constat", "facture", "permis"];
+  const requiredUploaded = requiredKeys.filter((k) => dossier.docs[k]?.fileName || dossier.docs[k]?.unavailable).length;
+  const canAnalyze = requiredUploaded === 6 && !analyzing;
 
   const runAnalysis = async () => {
     try {
@@ -178,10 +182,10 @@ function DossierPage() {
               <div className="h-1.5 w-32 rounded-full bg-muted overflow-hidden">
                 <div
                   className="h-full bg-primary transition-all"
-                  style={{ width: `${(uploaded / 6) * 100}%` }}
+                  style={{ width: `${(requiredUploaded / 6) * 100}%` }}
                 />
               </div>
-              <span className="tabular-nums">{uploaded}/6</span>
+              <span className="tabular-nums">{requiredUploaded}/6</span>
             </div>
             <Button
               variant="outline"
@@ -225,7 +229,7 @@ function DossierPage() {
                   <Files className="h-4 w-4 text-primary" />
                   Documents du dossier
                   <span className="ml-2 text-xs font-normal text-muted-foreground">
-                    {uploaded}/6 chargés
+                    {requiredUploaded}/6 requis chargés
                   </span>
                 </div>
                 {showDocs ? (
@@ -241,13 +245,15 @@ function DossierPage() {
                     Vous pouvez supprimer ou remplacer un document, puis relancer l'analyse.
                   </p>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {(Object.keys(DOC_META) as DocKey[]).map((k) => {
+                    {(Object.keys(DOC_META) as DocKey[])
+                      .filter((k) => k !== "photos_degats")
+                      .map((k) => {
                       const docState: DocState = dossier.docs[k] ?? {};
                       const hasFile = !!docState.fileName;
                       const isUnavailable = !!docState.unavailable;
                       const isDeleting =
                         deleteDocMutation.isPending &&
-                        (deleteDocMutation.variables as { docKey: DocKey })?.docKey === k;
+                        (deleteDocMutation.variables as { docKey: string })?.docKey === k;
                       const isUploading =
                         uploadMutation.isPending &&
                         uploadMutation.variables?.docKey === k;
@@ -346,6 +352,87 @@ function DossierPage() {
                       );
                     })}
                   </div>
+
+                  {/* ─── Section Photos des dégâts post-analyse ─── */}
+                  <div className="mt-4 border rounded-lg p-4 bg-muted/20">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <Camera className="h-4 w-4 text-primary" />
+                        <span className="text-sm font-medium">Photos des dégâts</span>
+                        {(() => {
+                          const n = Object.keys(dossier.docs).filter((k) => k.startsWith("photos_degats")).length;
+                          return n > 0 ? (
+                            <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded">{n} photo{n > 1 ? "s" : ""}</span>
+                          ) : null;
+                        })()}
+                      </div>
+                      <label className="cursor-pointer">
+                        <input
+                          type="file"
+                          multiple
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const files = Array.from(e.target.files || []);
+                            const existingPhotoKeys = Object.keys(dossier.docs).filter((k) => k.startsWith("photos_degats"));
+                            const nextIndex = existingPhotoKeys.length + 1;
+                            files.forEach((file, i) => {
+                              const slotKey = `photos_degats_${nextIndex + i}`;
+                              uploadMutation.mutate(
+                                { id: dossier.id, docKey: slotKey, file },
+                                { onError: () => toast.error(`Erreur lors de l'envoi de ${file.name}.`) }
+                              );
+                            });
+                            e.target.value = "";
+                          }}
+                        />
+                        <span className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border bg-card hover:bg-muted transition-colors">
+                          <ImagePlus className="h-3.5 w-3.5" />
+                          Ajouter des photos
+                        </span>
+                      </label>
+                    </div>
+                    {(() => {
+                      const photoKeys = Object.keys(dossier.docs).filter((k) => k.startsWith("photos_degats")).sort();
+                      if (photoKeys.length === 0) {
+                        return (
+                          <p className="text-xs text-muted-foreground text-center py-3 italic">
+                            Aucune photo. Ajoutez des photos puis relancez l'analyse.
+                          </p>
+                        );
+                      }
+                      return (
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                          {photoKeys.map((k) => {
+                            const photoState = dossier.docs[k] || {};
+                            const isDeleting = deleteDocMutation.isPending &&
+                              (deleteDocMutation.variables as { docKey: string })?.docKey === k;
+                            return (
+                              <div key={k} className="relative group rounded-md border overflow-hidden bg-card">
+                                {isDeleting && (
+                                  <div className="absolute inset-0 bg-background/70 flex items-center justify-center z-10">
+                                    <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                                  </div>
+                                )}
+                                <div className="flex items-center gap-2 px-3 py-2">
+                                  <Camera className="h-4 w-4 text-muted-foreground shrink-0" />
+                                  <span className="text-xs truncate flex-1">{photoState.fileName ?? k}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteDoc(k as DocKey)}
+                                    className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive p-0.5"
+                                    aria-label="Supprimer cette photo"
+                                  >
+                                    <X className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+                  </div>
                 </div>
               )}
             </Card>
@@ -357,26 +444,110 @@ function DossierPage() {
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-base font-semibold">Documents du dossier</h2>
                   <span className="text-xs text-muted-foreground">
-                    6 documents attendus
+                    6 requis + 1 optionnel
                   </span>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {(Object.keys(DOC_META) as DocKey[]).map((k) => (
-                    <DocUploader
-                      key={k}
-                      docKey={k}
-                      state={dossier.docs[k]}
-                      isUploading={uploadMutation.isPending && uploadMutation.variables?.docKey === k}
-                      onChange={(file?: File) =>
-                        uploadMutation.mutate(
-                          { id: dossier.id, docKey: k, file },
-                          {
-                            onError: () => toast.error("Erreur lors de l'envoi du document."),
-                          }
-                        )
-                      }
-                    />
-                  ))}
+                  {(Object.keys(DOC_META) as DocKey[])
+                    .filter((k) => k !== "photos_degats")
+                    .map((k) => (
+                      <DocUploader
+                        key={k}
+                        docKey={k}
+                        state={dossier.docs[k] || {}}
+                        isUploading={uploadMutation.isPending && uploadMutation.variables?.docKey === k}
+                        onChange={(file?: File) =>
+                          uploadMutation.mutate(
+                            { id: dossier.id, docKey: k, file },
+                            {
+                              onError: () => toast.error("Erreur lors de l'envoi du document."),
+                            }
+                          )
+                        }
+                      />
+                    ))}
+                </div>
+
+                {/* ─── Section Photos des dégâts (multi-upload) ─── */}
+                <div className="mt-4 border rounded-lg p-4 bg-muted/20">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Camera className="h-4 w-4 text-primary" />
+                      <span className="text-sm font-medium">Photos des dégâts</span>
+                      <span className="text-xs text-muted-foreground">(optionnel · plusieurs photos acceptées)</span>
+                    </div>
+                    <label className="cursor-pointer">
+                      <input
+                        type="file"
+                        multiple
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const files = Array.from(e.target.files || []);
+                          const existingPhotoKeys = Object.keys(dossier.docs).filter((k) =>
+                            k.startsWith("photos_degats")
+                          );
+                          const nextIndex = existingPhotoKeys.length + 1;
+                          files.forEach((file, i) => {
+                            const slotKey = `photos_degats_${nextIndex + i}`;
+                            uploadMutation.mutate(
+                              { id: dossier.id, docKey: slotKey, file },
+                              { onError: () => toast.error(`Erreur lors de l'envoi de ${file.name}.`) }
+                            );
+                          });
+                          e.target.value = "";
+                        }}
+                      />
+                      <span className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border bg-card hover:bg-muted transition-colors cursor-pointer">
+                        <ImagePlus className="h-3.5 w-3.5" />
+                        Ajouter des photos
+                      </span>
+                    </label>
+                  </div>
+
+                  {/* Galerie des photos uploadées */}
+                  {(() => {
+                    const photoKeys = Object.keys(dossier.docs)
+                      .filter((k) => k.startsWith("photos_degats"))
+                      .sort();
+                    if (photoKeys.length === 0) {
+                      return (
+                        <p className="text-xs text-muted-foreground text-center py-4 italic">
+                          Aucune photo ajoutée. L'analyse fonctionnera avec le texte du constat uniquement.
+                        </p>
+                      );
+                    }
+                    return (
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                        {photoKeys.map((k) => {
+                          const photoState = dossier.docs[k] || {};
+                          const isDeleting = deleteDocMutation.isPending &&
+                            (deleteDocMutation.variables as { docKey: string })?.docKey === k;
+                          return (
+                            <div key={k} className="relative group rounded-md border overflow-hidden bg-card">
+                              {isDeleting && (
+                                <div className="absolute inset-0 bg-background/70 flex items-center justify-center z-10">
+                                  <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                                </div>
+                              )}
+                              <div className="flex items-center gap-2 px-3 py-2">
+                                <Camera className="h-4 w-4 text-muted-foreground shrink-0" />
+                                <span className="text-xs truncate flex-1">{photoState.fileName ?? k}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteDoc(k as DocKey)}
+                                  className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive p-0.5"
+                                  aria-label="Supprimer cette photo"
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
                 </div>
               </Card>
             </div>
@@ -396,11 +567,11 @@ function DossierPage() {
                   <Play className="h-4 w-4 mr-2" />
                   Analyser le dossier
                 </Button>
-                {uploaded < 6 && (
+                {requiredUploaded < 6 && (
                   <p className="text-xs text-muted-foreground mt-3 flex items-start gap-1.5">
                     <AlertTriangle className="h-3.5 w-3.5 text-warning-foreground shrink-0 mt-0.5" />
-                    Chargez ou marquez comme non disponible les {6 - uploaded}{" "}
-                    document(s) restant(s).
+                    Chargez ou marquez comme non disponible les {6 - requiredUploaded}{" "}
+                    document(s) requis restant(s).
                   </p>
                 )}
               </Card>
@@ -624,10 +795,11 @@ function ReportView({
           ) : (
             <Card className="p-0 overflow-hidden">
               <div className="grid grid-cols-12 px-5 py-3 border-b bg-muted/40 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                <div className="col-span-5">Zone / poste</div>
-                <div className="col-span-2 text-center">Déclaré</div>
+                <div className="col-span-4">Zone / poste</div>
+                <div className="col-span-2 text-center">Déclaré (Constat)</div>
+                <div className="col-span-2 text-center">Visuel (Photo)</div>
                 <div className="col-span-2 text-center">Facturé</div>
-                <div className="col-span-2 text-right">Montant</div>
+                <div className="col-span-1 text-right">Montant</div>
                 <div className="col-span-1 text-right">État</div>
               </div>
               {report.damageMapping.map((m, i) => (
@@ -637,12 +809,21 @@ function ReportView({
                     m.ok ? "" : "bg-destructive/5"
                   }`}
                 >
-                  <div className="col-span-5 font-medium">{m.zone}</div>
+                  <div className="col-span-4 font-medium">{m.zone}</div>
                   <div className="col-span-2 text-center">
                     {m.declared ? (
                       <CheckCircle2 className="h-4 w-4 text-success inline" />
                     ) : (
                       <span className="text-destructive text-xs">Non</span>
+                    )}
+                  </div>
+                  <div className="col-span-2 text-center">
+                    {m.visible === true ? (
+                      <CheckCircle2 className="h-4 w-4 text-success inline" />
+                    ) : m.visible === false ? (
+                      <span className="text-destructive text-xs">Non</span>
+                    ) : (
+                      <span className="text-muted-foreground text-xs">—</span>
                     )}
                   </div>
                   <div className="col-span-2 text-center">
@@ -652,7 +833,7 @@ function ReportView({
                       <span className="text-destructive text-xs">Non</span>
                     )}
                   </div>
-                  <div className="col-span-2 text-right tabular-nums text-muted-foreground">
+                  <div className="col-span-1 text-right tabular-nums text-muted-foreground text-xs">
                     {m.montant ? `${m.montant.toFixed(3)} TND` : "—"}
                   </div>
                   <div className="col-span-1 text-right">

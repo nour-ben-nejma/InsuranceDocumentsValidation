@@ -30,13 +30,36 @@ def analyse_dossier(dossier_id: str, db: Session = Depends(get_db)):
         if state.get("fileName") and not state.get("unavailable"):
             local_path = storage.get_local_filepath(dossier_id, doc_key)
             if local_path and os.path.exists(local_path):
-                res = extract_text_from_image(local_path)
-                if res.get("status") == "success":
-                    extracted[doc_key] = res.get("extracted_data", {})
+                if doc_key.startswith("photos_degats"):
+                    from PIL import Image as PILImage
+                    from app.ocr.pipelines.photos_pipeline import run_extraction_flow_photos
+                    try:
+                        with PILImage.open(local_path) as img:
+                            fields, _ = run_extraction_flow_photos(img)
+                        # Agréger les pièces détectées depuis toutes les photos
+                        detected = fields.get("pieces_endommagees", []) or []
+                        existing = extracted.get("photos_degats", {}).get("pieces_endommagees", []) or []
+                        merged_pieces = list(dict.fromkeys(existing + detected))  # dédoublonnage ordonné
+                        extracted["photos_degats"] = {"pieces_endommagees": merged_pieces}
+                    except Exception as e:
+                        import traceback
+                        print(f"Error in {doc_key} pipeline: {e}")
+                        traceback.print_exc()
+                else:
+                    res = extract_text_from_image(local_path)
+                    if res.get("status") == "success":
+                        extracted[doc_key] = res.get("extracted_data", {})
 
     from app.coherence.aggregator import aggregate_report
     report = aggregate_report(extracted)
+
+    # Conserver les données brutes des photos dans le rapport pour les re-analyses futures
+    if "photos_degats" in extracted and extracted["photos_degats"]:
+        report["raw_photos"] = extracted["photos_degats"]
+
     updated_dossier = crud.update_dossier_report(db, dossier_id, report, status=report["global"])
+    if not updated_dossier:
+        raise HTTPException(status_code=404, detail="Dossier was deleted during analysis")
     return updated_dossier
 
 
@@ -58,6 +81,8 @@ def save_extracted(dossier_id: str, body: ExtractedPatch, db: Session = Depends(
         raise HTTPException(status_code=404, detail="Dossier not found")
 
     updated = crud.update_extracted_overrides(db, dossier_id, body.doc_key, body.fields)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Dossier was deleted")
     return updated
 
 
@@ -100,12 +125,19 @@ def reanalyse_dossier(dossier_id: str, db: Session = Depends(get_db)):
         if doc_key not in merged:
             merged[doc_key] = override_fields
 
+    # Réinjecter les données brutes des photos si elles ont été analysées lors de la première analyse
+    raw_photos = last_report.get("raw_photos")
+    if raw_photos and "photos_degats" not in merged:
+        merged["photos_degats"] = raw_photos
+
     from app.coherence.aggregator import aggregate_report
-    report = aggregate_report(merged)
+    report = aggregate_report(merged, is_normalized=True)
 
     # Préserver les données fusionnées telles quelles dans le rapport
     # (évite que la normalisation interne ne perde des champs modifiés manuellement)
     report["extracted"] = {k: v for k, v in merged.items() if v}
 
     updated_dossier = crud.update_dossier_report(db, dossier_id, report, status=report["global"])
+    if not updated_dossier:
+        raise HTTPException(status_code=404, detail="Dossier was deleted during analysis")
     return updated_dossier

@@ -52,5 +52,7 @@ Retourne ce JSON (sans fences markdown) :
     "Marque/Type": null,
     "N immatriculation": null,
     "Sens suivi": {{"Venant de": null, "Allant a": null}}
-  }}
+  }},
+  "10. Point de choc initial": null,
+  "11. Degats apparents": null
 }}"""

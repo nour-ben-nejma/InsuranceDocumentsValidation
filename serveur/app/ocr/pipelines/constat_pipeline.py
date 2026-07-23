@@ -160,6 +160,14 @@ def run_extraction_flow_constat_complete(image: Image.Image) -> tuple:
             "Vehicule A": _safe_get(parsed_a, "9. Identite du Vehicule") if parsed_a else {},
             "Vehicule B": _safe_get(parsed_b, "9. Identite du Vehicule") if parsed_b else {},
         },
+        "10. Point de choc initial": {
+            "Vehicule A": _safe_get(parsed_a, "10. Point de choc initial") if parsed_a else None,
+            "Vehicule B": _safe_get(parsed_b, "10. Point de choc initial") if parsed_b else None,
+        },
+        "11. Degats apparents": {
+            "Vehicule A": _safe_get(parsed_a, "11. Degats apparents") if parsed_a else None,
+            "Vehicule B": _safe_get(parsed_b, "11. Degats apparents") if parsed_b else None,
+        },
         "12. Circonstances": {
             "Vehicule A": boxes_a,
             "Vehicule B": boxes_b,

@@ -6,6 +6,7 @@ import {
   ClipboardList,
   ReceiptText,
   CreditCard,
+  Camera,
   UploadCloud,
   CheckCircle2,
   X,
@@ -22,16 +23,17 @@ const iconMap = {
   ClipboardList,
   ReceiptText,
   CreditCard,
+  Camera,
 };
 
 export function DocUploader({
   docKey,
-  state,
+  state = {},
   isUploading = false,
   onChange,
 }: {
   docKey: DocKey;
-  state: DocState;
+  state?: DocState;
   isUploading?: boolean;
   /** Pass `undefined` to mark as unavailable, or a `File` to upload it. */
   onChange: (file?: File) => void;
@@ -49,8 +51,9 @@ export function DocUploader({
     onChange(file);
   };
 
-  const uploaded = !!state.fileName;
-  const unavailable = !!state.unavailable;
+  const safeState: DocState = state ?? {};
+  const uploaded = !!safeState.fileName;
+  const unavailable = !!safeState.unavailable;
 
   return (
     <div

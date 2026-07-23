@@ -6,19 +6,26 @@ from app.coherence.identity_check import check_identity_coherence
 
 logger = logging.getLogger(__name__)
 
-def aggregate_report(raw_extracted: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+def aggregate_report(raw_extracted: Dict[str, Dict[str, Any]], is_normalized: bool = False) -> Dict[str, Any]:
     """
     Builds the report dict expected by the frontend.
     """
-    # 1. Normalize data
-    normalized = build_normalized_dossier(raw_extracted)
+    # 1. Normalize data if not already normalized
+    if is_normalized:
+        normalized = raw_extracted
+    else:
+        normalized = build_normalized_dossier(raw_extracted)
 
     # 2. Run checks
+    from app.coherence.date_check import check_dates_coherence
+    from app.coherence.damage_facture_check import check_damages_coherence, build_damage_mapping
+    from app.coherence.amount_check import check_amounts_coherence
+
     anomalies = []
     anomalies.extend(check_identity_coherence(normalized))
-
-    # Add a mock anomaly if we want to test incoherence based on missing data
-    # (Optional, but let's stick to the real checks for now)
+    anomalies.extend(check_dates_coherence(normalized))
+    anomalies.extend(check_damages_coherence(normalized))
+    anomalies.extend(check_amounts_coherence(normalized))
 
     # 3. Build comparisons for the frontend
     comparisons = []
@@ -115,8 +122,8 @@ def aggregate_report(raw_extracted: Dict[str, Dict[str, Any]]) -> Dict[str, Any]
 
     global_status = "coherent" if not anomalies else "a_verifier"
     
-    # Optional damage mapping for frontend
-    damage_mapping = []
+    # Build damage mapping for frontend
+    damage_mapping = build_damage_mapping(normalized)
     
     return {
         "global": global_status,

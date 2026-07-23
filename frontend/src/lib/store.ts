@@ -7,7 +7,8 @@ export type DocKey =
   | "attestation"
   | "constat"
   | "facture"
-  | "permis";
+  | "permis"
+  | "photos_degats";
 
 export const DOC_META: Record<DocKey, { label: string; icon: string }> = {
   carte_grise: { label: "Carte grise", icon: "FileText" },
@@ -16,6 +17,7 @@ export const DOC_META: Record<DocKey, { label: string; icon: string }> = {
   constat: { label: "Constat amiable", icon: "ClipboardList" },
   facture: { label: "Facture de réparation", icon: "ReceiptText" },
   permis: { label: "Permis de conduire", icon: "CreditCard" },
+  photos_degats: { label: "Photos des dégâts", icon: "Camera" },
 };
 
 export type DocState = {
@@ -58,6 +60,7 @@ export type Report = {
     zone: string;
     declared: boolean;
     invoiced: boolean;
+    visible?: boolean | null;
     montant?: number;
     ok: boolean;
   }[];
@@ -70,7 +73,7 @@ export type Dossier = {
   client: string;
   createdAt: number;
   status: "brouillon" | "en_cours" | "coherent" | "a_verifier";
-  docs: Record<DocKey, DocState>;
+  docs: Record<string, DocState>;
   report?: Report;
 };
 
@@ -91,6 +94,7 @@ const emptyDocs = (): Record<DocKey, DocState> => ({
   constat: {},
   facture: {},
   permis: {},
+  photos_degats: {},
 });
 
 export const useStore = create<Store>()(
@@ -231,6 +235,7 @@ export function generateMockReport(d: Dossier): Report {
       zone,
       declared: isDeclared,
       invoiced: !!poste,
+      visible: null,
       montant: poste?.montant,
       ok: isDeclared && !!poste,
     };
