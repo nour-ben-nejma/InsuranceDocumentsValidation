@@ -120,4 +120,20 @@ def check_dates_coherence(normalized_dossier: Dict[str, Any]) -> List[Dict[str, 
                 "detail": msg
             })
             
+    # 4. Coherence Date Delivrance Permis (Constat vs Permis)
+    permis = normalized_dossier.get("permis")
+    if permis:
+        permis_date_str = permis.get("date_delivrance")
+        permis_date = parse_date(permis_date_str)
+        if permis_delivre and permis_date:
+            if permis_delivre != permis_date:
+                msg = (f"La date de delivrance du permis sur le constat ({permis_delivre.strftime('%d/%m/%Y')}) "
+                       f"ne correspond pas a la date sur le permis fourni ({permis_date.strftime('%d/%m/%Y')}).")
+                anomalies.append({
+                    "rule": "date_delivrance_permis_incoherente",
+                    "severity": "mineure",
+                    "message": msg,
+                    "detail": msg
+                })
+                
     return anomalies

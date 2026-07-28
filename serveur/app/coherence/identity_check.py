@@ -141,4 +141,39 @@ def check_identity_coherence(normalized_dossier: Dict[str, Any]) -> List[Dict]:
                 "detail": msg,
             })
 
+        marque_constat = constat.get("marque_type_a")
+        cg_constructeur = carte_grise.get("constructeur")
+        cg_type = carte_grise.get("type_commercial")
+        
+        if marque_constat and (cg_constructeur or cg_type):
+            marque_constat_norm = _normalize_name(marque_constat)
+            cg_marque_norm = _normalize_name(f"{cg_constructeur or ''} {cg_type or ''}")
+            if marque_constat_norm and cg_marque_norm:
+                if not (marque_constat_norm in cg_marque_norm or cg_marque_norm in marque_constat_norm or _similarity(marque_constat_norm, cg_marque_norm) >= 0.5):
+                    msg = (f"La marque/type de vehicule dans le constat ('{marque_constat}') "
+                           f"semble differer de la carte grise ('{cg_constructeur} {cg_type}').")
+                    anomalies.append({
+                        "rule": "marque_vehicule_incoherente",
+                        "severity": "mineure",
+                        "message": msg,
+                        "detail": msg,
+                    })
+
+    # 5. Coherence CIN <-> Carte Grise
+    if cin and carte_grise:
+        cin_num = cin.get("numero_cin")
+        cg_cin = carte_grise.get("cin_ou_mf")
+        if cin_num and cg_cin:
+            n1 = re.sub(r"\D", "", str(cin_num))
+            n2 = re.sub(r"\D", "", str(cg_cin))
+            if n1 and n2 and len(n1) == 8 and len(n2) == 8 and n1 != n2:
+                msg = (f"Le numero de CIN fourni ('{cin_num}') ne correspond pas "
+                       f"au numero inscrit sur la carte grise ('{cg_cin}').")
+                anomalies.append({
+                    "rule": "cin_carte_grise_incoherente",
+                    "severity": "majeure",
+                    "message": msg,
+                    "detail": msg,
+                })
+
     return anomalies

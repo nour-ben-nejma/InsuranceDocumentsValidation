@@ -22,9 +22,15 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex h-screen w-screen bg-background text-foreground overflow-hidden">
       <aside className="hidden md:flex w-64 flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border shrink-0">
-        <div className="flex items-center gap-2 px-5 py-6 border-b border-sidebar-border">
-          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
-            <ShieldCheck className="h-5 w-5" />
+        <div className="flex items-center gap-3 px-5 py-6 border-b border-sidebar-border">
+          <div
+            className="flex h-11 w-11 items-center justify-center rounded-xl shrink-0"
+            style={{
+              background: "linear-gradient(135deg, #3d4a2a 0%, #4f5e34 60%, #5c6e3a 100%)",
+              boxShadow: "0 2px 10px 0 rgba(60,70,30,0.45), inset 0 1px 0 rgba(255,255,255,0.08)",
+            }}
+          >
+            <ShieldCheck className="h-6 w-6 text-white drop-shadow" strokeWidth={1.8} />
           </div>
           <div className="leading-tight">
             <div className="text-sm font-semibold tracking-tight">InsuranceDV</div>

@@ -101,7 +101,130 @@ def aggregate_report(raw_extracted: Dict[str, Dict[str, Any]], is_normalized: bo
             "values": values
         })
 
-    # 4. Build a flattened extracted dict for the frontend view
+    # Numéro de Permis
+    constat_permis = constat_data.get("conducteur_a_permis")
+    permis_num = permis_data.get("numero_permis")
+    
+    if constat_permis or permis_num:
+        values = {}
+        docs = []
+        if constat_permis:
+            values["constat"] = str(constat_permis)
+            docs.append("constat")
+        if permis_num:
+            values["permis"] = str(permis_num)
+            docs.append("permis")
+            
+        ok = True
+        if constat_permis and permis_num:
+            import re
+            n1 = re.sub(r"\D", "", str(constat_permis))
+            n2 = re.sub(r"\D", "", str(permis_num))
+            if n1 and n2 and n1 != n2:
+                ok = False
+                
+        comparisons.append({
+            "field": "numero_permis",
+            "label": "Numéro de Permis",
+            "ok": ok,
+            "docs": docs,
+            "values": values
+        })
+
+    # Date de délivrance du permis
+    constat_date_permis = constat_data.get("conducteur_a_permis_delivre")
+    permis_date = permis_data.get("date_delivrance")
+    
+    if constat_date_permis or permis_date:
+        values = {}
+        docs = []
+        if constat_date_permis:
+            values["constat"] = str(constat_date_permis)
+            docs.append("constat")
+        if permis_date:
+            values["permis"] = str(permis_date)
+            docs.append("permis")
+            
+        ok = True
+        if constat_date_permis and permis_date:
+            from app.coherence.date_check import parse_date
+            d1 = parse_date(str(constat_date_permis))
+            d2 = parse_date(str(permis_date))
+            if d1 and d2 and d1 != d2:
+                ok = False
+                
+        comparisons.append({
+            "field": "date_delivrance_permis",
+            "label": "Date de Délivrance (Permis)",
+            "ok": ok,
+            "docs": docs,
+            "values": values
+        })
+
+    # Marque / Type
+    constat_marque = constat_data.get("marque_type_a")
+    cg_constructeur = cg_data.get("constructeur")
+    cg_type = cg_data.get("type_commercial")
+    
+    if constat_marque or cg_constructeur or cg_type:
+        values = {}
+        docs = []
+        if constat_marque:
+            values["constat"] = str(constat_marque)
+            docs.append("constat")
+        
+        cg_marque_full = f"{cg_constructeur or ''} {cg_type or ''}".strip()
+        if cg_marque_full:
+            values["carte_grise"] = cg_marque_full
+            docs.append("carte_grise")
+            
+        ok = True
+        if constat_marque and cg_marque_full:
+            from app.coherence.identity_check import _normalize_name, _similarity
+            m1 = _normalize_name(constat_marque)
+            m2 = _normalize_name(cg_marque_full)
+            if m1 and m2:
+                if not (m1 in m2 or m2 in m1 or _similarity(m1, m2) >= 0.5):
+                    ok = False
+                    
+        comparisons.append({
+            "field": "marque_type",
+            "label": "Marque / Type de Véhicule",
+            "ok": ok,
+            "docs": docs,
+            "values": values
+        })
+
+    # Numéro CIN
+    cin_num = cin_data.get("numero_cin")
+    cg_cin = cg_data.get("cin_ou_mf")
+    
+    if cin_num or cg_cin:
+        values = {}
+        docs = []
+        if cin_num:
+            values["cin"] = str(cin_num)
+            docs.append("cin")
+        if cg_cin:
+            values["carte_grise"] = str(cg_cin)
+            docs.append("carte_grise")
+            
+        ok = True
+        if cin_num and cg_cin:
+            import re
+            n1 = re.sub(r"\D", "", str(cin_num))
+            n2 = re.sub(r"\D", "", str(cg_cin))
+            if n1 and n2 and len(n1) == 8 and len(n2) == 8 and n1 != n2:
+                ok = False
+                
+        comparisons.append({
+            "field": "numero_cin",
+            "label": "Numéro de CIN",
+            "ok": ok,
+            "docs": docs,
+            "values": values
+        })
+
     flat_extracted = {}
     for doc_key, data in normalized.items():
         if not data:

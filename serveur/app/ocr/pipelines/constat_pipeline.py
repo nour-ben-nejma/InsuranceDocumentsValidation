@@ -110,12 +110,12 @@ def run_extraction_flow_constat_complete(image: Image.Image) -> tuple:
     t_veh = time.perf_counter()
     parsed_a, raw_a, ta = query_qwen(
         vehicule_a_crop, make_prompt_vehicule("A"),
-        max_tokens=320, resolution_limit=600, label="veh-A"
+        max_tokens=1024, resolution_limit=600, label="veh-A"
     )
     torch.cuda.empty_cache()
     parsed_b, raw_b, tb = query_qwen(
         vehicule_b_crop, make_prompt_vehicule("B"),
-        max_tokens=320, resolution_limit=600, label="veh-B"
+        max_tokens=1024, resolution_limit=600, label="veh-B"
     )
     torch.cuda.empty_cache()
     timings["veh_batch"] = time.perf_counter() - t_veh
