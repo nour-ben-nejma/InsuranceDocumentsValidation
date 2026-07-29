@@ -35,12 +35,14 @@ def aggregate_report(raw_extracted: Dict[str, Dict[str, Any]], is_normalized: bo
     cin_data = normalized.get('cin') or {}
     permis_data = normalized.get('permis') or {}
     cg_data = normalized.get('carte_grise') or {}
+    attestation_data = normalized.get('attestation') or {}
     
     constat_nom = f"{constat_data.get('conducteur_a_nom', '')} {constat_data.get('conducteur_a_prenom', '')}".strip()
     cin_nom = f"{cin_data.get('nom', '')} {cin_data.get('prenom', '')}".strip()
     permis_nom = f"{permis_data.get('nom', '')} {permis_data.get('prenom', '')}".strip()
+    attest_nom = attestation_data.get('nom_prenom', '').strip()
     
-    if cin_nom or permis_nom or constat_nom:
+    if cin_nom or permis_nom or constat_nom or attest_nom:
         values = {}
         docs = []
         if constat_nom:
@@ -52,6 +54,9 @@ def aggregate_report(raw_extracted: Dict[str, Dict[str, Any]], is_normalized: bo
         if permis_nom:
             values["permis"] = permis_nom
             docs.append("permis")
+        if attest_nom:
+            values["attestation"] = attest_nom
+            docs.append("attestation")
             
         # Check if they match loosely
         ok = True
@@ -74,8 +79,9 @@ def aggregate_report(raw_extracted: Dict[str, Dict[str, Any]], is_normalized: bo
     # Immatriculation
     constat_immat = constat_data.get("immatriculation_a")
     cg_immat = cg_data.get("immatriculation")
+    attest_immat = attestation_data.get("immatriculation")
     
-    if constat_immat or cg_immat:
+    if constat_immat or cg_immat or attest_immat:
         values = {}
         docs = []
         if constat_immat:
@@ -84,14 +90,24 @@ def aggregate_report(raw_extracted: Dict[str, Dict[str, Any]], is_normalized: bo
         if cg_immat:
             values["carte_grise"] = cg_immat
             docs.append("carte_grise")
+        if attest_immat:
+            values["attestation"] = attest_immat
+            docs.append("attestation")
             
         ok = True
-        if constat_immat and cg_immat:
-            import re
-            n1 = re.sub(r"[^A-Za-z0-9]", "", str(constat_immat)).upper()
-            n2 = re.sub(r"[^A-Za-z0-9]", "", str(cg_immat)).upper()
-            if n1 != n2:
-                ok = False
+        import re
+        immat_list = []
+        if constat_immat: immat_list.append(str(constat_immat))
+        if cg_immat: immat_list.append(str(cg_immat))
+        if attest_immat: immat_list.append(str(attest_immat))
+        
+        if len(immat_list) > 1:
+            n1 = re.sub(r"[^A-Za-z0-9]", "", immat_list[0]).upper()
+            for i in immat_list[1:]:
+                n2 = re.sub(r"[^A-Za-z0-9]", "", i).upper()
+                if n1 != n2:
+                    ok = False
+                    break
                 
         comparisons.append({
             "field": "immatriculation",
@@ -129,6 +145,43 @@ def aggregate_report(raw_extracted: Dict[str, Dict[str, Any]], is_normalized: bo
             "ok": ok,
             "docs": docs,
             "values": values
+        })
+
+    # Validité de l'assurance
+    constat_validite_du = constat_data.get("assurance_validite_du")
+    constat_validite_au = constat_data.get("assurance_validite_au")
+    attest_validite_du = attestation_data.get("date_debut")
+    attest_validite_au = attestation_data.get("date_fin")
+
+    if (constat_validite_du or constat_validite_au) or (attest_validite_du or attest_validite_au):
+        values = {}
+        docs = []
+        if constat_validite_du or constat_validite_au:
+            values["constat"] = f"{constat_validite_du or '?'} → {constat_validite_au or '?'}"
+            docs.append("constat")
+        if attest_validite_du or attest_validite_au:
+            values["attestation"] = f"{attest_validite_du or '?'} → {attest_validite_au or '?'}"
+            docs.append("attestation")
+
+        ok = True
+        if (constat_validite_du or constat_validite_au) and (attest_validite_du or attest_validite_au):
+            from app.coherence.date_check import parse_date
+            c_du = parse_date(str(constat_validite_du)) if constat_validite_du else None
+            c_au = parse_date(str(constat_validite_au)) if constat_validite_au else None
+            a_du = parse_date(str(attest_validite_du)) if attest_validite_du else None
+            a_au = parse_date(str(attest_validite_au)) if attest_validite_au else None
+
+            if c_du and a_du and c_du != a_du:
+                ok = False
+            if c_au and a_au and c_au != a_au:
+                ok = False
+                
+        comparisons.append({
+            "field": "validite",
+            "label": "Validité assurance au sinistre",
+            "docs": docs,
+            "values": values,
+            "ok": ok
         })
 
     # Date de délivrance du permis

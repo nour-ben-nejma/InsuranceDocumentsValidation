@@ -104,6 +104,15 @@ def build_normalized_dossier(documents: Dict[str, Optional[Dict]]) -> Dict[str, 
             "numero_permis": _unwrap_value(_get(permis, "numero_permis")),
             "date_delivrance": _unwrap_value(_get(permis, "date_delivrance")),
         } if permis else None,
+        "attestation": {
+            "compagnie": _unwrap_value(_get(documents.get("attestation"), "compagnie")),
+            "nom_prenom": _unwrap_value(_get(documents.get("attestation"), "nom_prenom")),
+            "date_debut": _unwrap_value(_get(documents.get("attestation"), "date_debut")),
+            "date_fin": _unwrap_value(_get(documents.get("attestation"), "date_fin")),
+            "immatriculation": _unwrap_value(_get(documents.get("attestation"), "immatriculation")),
+            "marque": _unwrap_value(_get(documents.get("attestation"), "marque")),
+            "type_commercial": _unwrap_value(_get(documents.get("attestation"), "type_commercial")),
+        } if documents.get("attestation") else None,
         "photos_degats": {
             "pieces_endommagees": _get(photos_degats, "pieces_endommagees", default=[])
         } if photos_degats else None,

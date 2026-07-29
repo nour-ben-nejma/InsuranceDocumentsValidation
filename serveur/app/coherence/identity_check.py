@@ -16,6 +16,41 @@ from typing import Any, Dict, List, Optional
 
 SIMILARITY_THRESHOLD = 0.72  # en dessous -> consideres comme des noms differents
 
+# Plage Unicode des caracteres arabes
+_ARABIC_RE = re.compile(r"[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]")
+# Caracteres latins de base (hors ponctuation/chiffres)
+_LATIN_RE  = re.compile(r"[A-Za-zÀ-ÖØ-öø-ÿ]")
+
+
+def _has_arabic(text: str) -> bool:
+    return bool(_ARABIC_RE.search(text))
+
+
+def _has_latin(text: str) -> bool:
+    return bool(_LATIN_RE.search(text))
+
+
+def _mixed_scripts(name1: Optional[str], name2: Optional[str]) -> bool:
+    """
+    Retourne True si l'un des noms est en arabe et l'autre en latin.
+    Dans ce cas, la comparaison textuelle n'a pas de sens : le meme nom
+    peut etre ecrit 'بن صالح احمد' en arabe et 'BEN Salah Ahmed' en latin.
+    On ne peut pas detecter une divergence dans cette situation sans
+    translitterateur dedie, donc on considere les noms comme coherents.
+    """
+    if not name1 or not name2:
+        return False
+    n1_arabic = _has_arabic(name1)
+    n2_arabic = _has_arabic(name2)
+    n1_latin  = _has_latin(name1)
+    n2_latin  = _has_latin(name2)
+    # Un nom principalement arabe vs un nom principalement latin
+    if n1_arabic and not n1_latin and n2_latin and not n2_arabic:
+        return True
+    if n2_arabic and not n2_latin and n1_latin and not n1_arabic:
+        return True
+    return False
+
 
 def _normalize_name(value: Optional[str]) -> str:
     if not value:
@@ -34,9 +69,14 @@ def _similarity(a: str, b: str) -> float:
 
 
 def _names_match(name1: Optional[str], name2: Optional[str]) -> bool:
+    # Si les deux noms sont dans des scripts differents (arabe vs latin),
+    # on ne peut pas comparer : on suppose qu'ils sont coherents pour eviter
+    # les faux positifs de translitteration (ex: 'بن صالح أحمد' == 'BEN Salah Ahmed').
+    if _mixed_scripts(name1, name2):
+        return True
     n1, n2 = _normalize_name(name1), _normalize_name(name2)
     if not n1 or not n2:
-        return True  # absence de donnee -> pas de contradiction, juste rien a comparer
+        return True  # absence de donnee -> pas de contradiction
     return _similarity(n1, n2) >= SIMILARITY_THRESHOLD
 
 

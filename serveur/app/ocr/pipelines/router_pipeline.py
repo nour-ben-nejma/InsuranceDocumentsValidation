@@ -34,6 +34,7 @@ _SCHEMA = {
                      "type_commercial", "date_mise_circulation"],
     "permis_conduire": ["numero_permis", "nom", "prenom", "date_naissance", "lieu_naissance",
                          "numero_carte", "categories"],
+    "attestation_assurance": ["compagnie", "nom_prenom", "date_debut", "date_fin", "immatriculation", "marque", "type_commercial"],
 }
 
 
@@ -50,14 +51,16 @@ def _classify_document(image: Image.Image) -> str:
 
     classif_prompt = (
         "Quel type de document parmi : facture_reparation, constat_amiable, "
-        "piece_identite, carte_grise, permis_conduire ? Un seul mot.\n"
+        "piece_identite, carte_grise, permis_conduire, attestation_assurance ? Un seul mot.\n"
         "Indices :\n"
         "- carte_grise = certificat d'immatriculation d'un VEHICULE (pas une "
         "personne), mentionne constructeur/type commercial/N immatriculation.\n"
         "- piece_identite = carte d'identite nationale (CIN) d'une personne, "
         "sans photo de vehicule, generalement bleue/verte.\n"
         "- permis_conduire = carte 'PERMIS DE CONDUIRE' avec photo d'identite "
-        "de la personne et categories de vehicules autorises."
+        "de la personne et categories de vehicules autorises.\n"
+        "- attestation_assurance = certificat ou attestation d'assurance automobile "
+        "mentionnant une periode de validite (Du / Au) et une compagnie d'assurance."
     )
     messages = [{
         "role": "user",
@@ -95,13 +98,16 @@ def _classify_document(image: Image.Image) -> str:
 
 
 def _run_simple_card_pipeline(matched_type: str, image: Image.Image) -> dict:
-    """Factorise le traitement des documents 'carte simple' (CIN, carte grise, permis)."""
+    """Factorise le traitement des documents 'carte simple' (CIN, carte grise, permis, attestation)."""
     if matched_type == "piece_identite":
         extracted_fields, raw_backup = run_extraction_flow_cin(image)
     elif matched_type == "carte_grise":
         extracted_fields, raw_backup = run_extraction_flow_carte_grise(image)
-    else:  # permis_conduire
+    elif matched_type == "permis_conduire":
         extracted_fields, raw_backup = run_extraction_flow_permis(image)
+    else:  # attestation_assurance
+        from app.ocr.pipelines.attestation_pipeline import run_extraction_flow_attestation
+        extracted_fields, raw_backup = run_extraction_flow_attestation(image)
 
     structured = {f: {"value": extracted_fields.get(f) or "Non specifie"}
                   for f in _SCHEMA[matched_type]}
@@ -131,7 +137,7 @@ def extract_text_from_image(image_path: str) -> dict:
                 "status": "success",
             }
 
-        elif matched_type in ("piece_identite", "carte_grise", "permis_conduire"):
+        elif matched_type in ("piece_identite", "carte_grise", "permis_conduire", "attestation_assurance"):
             result = _run_simple_card_pipeline(matched_type, image)
             return {
                 "document_type": matched_type,
